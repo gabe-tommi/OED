@@ -11,3 +11,26 @@ CREATE TABLE IF NOT EXISTS readings (
 	CHECK (start_timestamp < readings.end_timestamp),
   PRIMARY KEY (meter_id, start_timestamp)
 );
+
+-- Convert readings table to TimescaleDB hypertable for automatic time-based partitioning
+-- Partitions data into 7-day chunks for efficient parallel queries
+SELECT create_hypertable('readings', 'start_timestamp', 
+    chunk_time_interval => INTERVAL '7 days',
+    if_not_exists => TRUE
+);
+
+-- Enable compression with optimized settings for meter data
+-- Segments by meter_id for efficient per-meter queries
+-- Orders by timestamp for better compression ratios
+ALTER TABLE readings SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'meter_id',
+    timescaledb.compress_orderby = 'start_timestamp DESC'
+);
+
+-- Automatically compress data older than 14 days (saves ~90% storage)
+SELECT add_compression_policy('readings', INTERVAL '14 days', if_not_exists => TRUE);
+
+-- Additional indexes for common query patterns
+CREATE INDEX IF NOT EXISTS readings_end_timestamp_idx ON readings (end_timestamp DESC);
+CREATE INDEX IF NOT EXISTS readings_meter_time_idx ON readings (meter_id, start_timestamp DESC, end_timestamp DESC);
