@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OED cik_vary Benchmark</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0d1117;
+            color: #e6edf3;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        header {
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            font-weight: normal;
+            color: #58a6ff;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        header p {
+            color: #8b949e;
+            font-size: 0.85rem;
+            margin-top: 6px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 24px;
+        }
+
+        .card.full { grid-column: 1 / -1; }
+
+        .card h2 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #8b949e;
+            margin-bottom: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 320px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 8px 12px;
+            color: #8b949e;
+            font-weight: normal;
+            border-bottom: 1px solid #30363d;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #21262d;
+            color: #e6edf3;
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        td.highlight { color: #f85149; font-weight: bold; }
+        td.good { color: #3fb950; }
+        td.warn { color: #d29922; }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .stat {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 16px;
+        }
+
+        .stat .label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #8b949e;
+            margin-bottom: 8px;
+        }
+
+        .stat .value {
+            font-size: 1.6rem;
+            color: #58a6ff;
+        }
+
+        .stat .unit {
+            font-size: 0.75rem;
+            color: #8b949e;
+            margin-left: 4px;
+        }
+
+        .paste-area {
+            width: 100%;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            color: #e6edf3;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            padding: 12px;
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .paste-area:focus { outline: 1px solid #58a6ff; }
+
+        button {
+            margin-top: 12px;
+            background: #238636;
+            border: 1px solid #2ea043;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            padding: 8px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover { background: #2ea043; }
+
+        .error { color: #f85149; font-size: 0.8rem; margin-top: 8px; }
+
+        .bar-fill {
+            height: 8px;
+            background: #58a6ff;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .bar-track {
+            background: #21262d;
+            border-radius: 2px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>OED // cik_vary Query Performance Benchmark</h1>
+    <p>Measures how query time scales with the number of time-varying conversion segments</p>
+</header>
+
+<div class="card full" style="margin-bottom: 24px;">
+    <h2>Paste benchmark_results.json</h2>
+    <textarea class="paste-area" id="jsonInput" placeholder='[{"name":"1 segment (no variation)","segments":1,"avgMs":167,...},...]'></textarea>
+    <button onclick="loadData()">Load Results</button>
+    <div class="error" id="error"></div>
+</div>
+
+<div class="stat-grid" style="margin-bottom: 24px;" id="stats" style="display:none"></div>
+
+<div class="grid" id="charts" style="display:none">
+    <div class="card full">
+        <h2>Query Time vs Conversion Segments</h2>
+        <div class="chart-container">
+            <canvas id="mainChart"></canvas>
+        </div>
+    </div>
+    <div class="card">
+        <h2>Min / Avg / Max per Scenario</h2>
+        <div class="chart-container">
+            <canvas id="rangeChart"></canvas>
+        </div>
+    </div>
+    <div class="card">
+        <h2>Slowdown Factor vs Baseline</h2>
+        <div class="chart-container">
+            <canvas id="factorChart"></canvas>
+        </div>
+    </div>
+    <div class="card full">
+        <h2>Results Table</h2>
+        <table id="resultsTable"></table>
+    </div>
+</div>
+
+<script>
+let mainChart, rangeChart, factorChart;
+
+// Sample data so the page isn't blank on load
+const SAMPLE_DATA = [
+    {"name":"1 segment","segments":1,"avgMs":167,"minMs":160,"maxMs":175,"rowCount":35047},
+    {"name":"12 segments (monthly)","segments":12,"avgMs":190,"minMs":185,"maxMs":198,"rowCount":35047},
+    {"name":"52 segments (weekly)","segments":52,"avgMs":340,"minMs":330,"maxMs":355,"rowCount":35047},
+    {"name":"365 segments (daily)","segments":365,"avgMs":890,"minMs":870,"maxMs":910,"rowCount":35047},
+    {"name":"2160 segments (4hr)","segments":2160,"avgMs":3200,"minMs":3100,"maxMs":3350,"rowCount":35047},
+    {"name":"8760 segments (hourly)","segments":8760,"avgMs":9800,"minMs":9600,"maxMs":10100,"rowCount":35047},
+    {"name":"17520 segments (30min)","segments":17520,"avgMs":19500,"minMs":19100,"maxMs":20200,"rowCount":35047}
+];
+
+function loadData() {
+    const input = document.getElementById('jsonInput').value.trim();
+    const errorEl = document.getElementById('error');
+    errorEl.textContent = '';
+
+    let data;
+    try {
+        data = JSON.parse(input);
+        if (!Array.isArray(data)) throw new Error('Expected an array');
+        if (!data[0].avgMs) throw new Error('Missing avgMs field');
+    } catch(e) {
+        errorEl.textContent = 'Invalid JSON: ' + e.message;
+        return;
+    }
+
+    renderAll(data);
+}
+
+function getColor(ms, baseline) {
+    const factor = ms / baseline;
+    if (factor <= 1.5) return 'good';
+    if (factor <= 5) return 'warn';
+    return 'highlight';
+}
+
+function renderAll(data) {
+    document.getElementById('charts').style.display = 'block';
+    document.getElementById('stats').style.display = 'grid';
+
+    const baseline = data[0].avgMs;
+    const worst = data[data.length - 1];
+    const factor = (worst.avgMs / baseline).toFixed(1);
+
+    // Stats
+    document.getElementById('stats').innerHTML = `
+        <div class="stat">
+            <div class="label">Baseline (1 segment)</div>
+            <div class="value">${baseline}<span class="unit">ms</span></div>
+        </div>
+        <div class="stat">
+            <div class="label">Worst case (${worst.segments.toLocaleString()} segs)</div>
+            <div class="value">${worst.avgMs.toLocaleString()}<span class="unit">ms</span></div>
+        </div>
+        <div class="stat">
+            <div class="label">Slowdown factor</div>
+            <div class="value">${factor}<span class="unit">×</span></div>
+        </div>
+        <div class="stat">
+            <div class="label">Rows returned</div>
+            <div class="value">${data[0].rowCount.toLocaleString()}<span class="unit">rows</span></div>
+        </div>
+    `;
+
+    const labels = data.map(d => d.segments.toLocaleString() + ' segs');
+    const chartDefaults = {
+        color: '#8b949e',
+        borderColor: '#30363d',
+    };
+
+    // Main line chart
+    if (mainChart) mainChart.destroy();
+    mainChart = new Chart(document.getElementById('mainChart'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Avg query time (ms)',
+                    data: data.map(d => d.avgMs),
+                    borderColor: '#58a6ff',
+                    backgroundColor: 'rgba(88,166,255,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#58a6ff',
+                    pointRadius: 5,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#8b949e' } } },
+            scales: {
+                x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+                y: { 
+                    ticks: { color: '#8b949e', callback: v => v + 'ms' }, 
+                    grid: { color: '#21262d' },
+                    title: { display: true, text: 'Query Time (ms)', color: '#8b949e' }
+                }
+            }
+        }
+    });
+
+    // Range chart (min/avg/max)
+    if (rangeChart) rangeChart.destroy();
+    rangeChart = new Chart(document.getElementById('rangeChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Min',
+                    data: data.map(d => d.minMs),
+                    backgroundColor: 'rgba(63,185,80,0.7)',
+                },
+                {
+                    label: 'Avg',
+                    data: data.map(d => d.avgMs),
+                    backgroundColor: 'rgba(88,166,255,0.7)',
+                },
+                {
+                    label: 'Max',
+                    data: data.map(d => d.maxMs),
+                    backgroundColor: 'rgba(248,81,73,0.7)',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#8b949e' } } },
+            scales: {
+                x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+                y: { ticks: { color: '#8b949e', callback: v => v + 'ms' }, grid: { color: '#21262d' } }
+            }
+        }
+    });
+
+    // Slowdown factor chart
+    if (factorChart) factorChart.destroy();
+    factorChart = new Chart(document.getElementById('factorChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Slowdown vs baseline',
+                data: data.map(d => parseFloat((d.avgMs / baseline).toFixed(2))),
+                backgroundColor: data.map(d => {
+                    const f = d.avgMs / baseline;
+                    if (f <= 1.5) return 'rgba(63,185,80,0.7)';
+                    if (f <= 5) return 'rgba(210,153,34,0.7)';
+                    return 'rgba(248,81,73,0.7)';
+                }),
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#8b949e' } } },
+            scales: {
+                x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+                y: { 
+                    ticks: { color: '#8b949e', callback: v => v + '×' }, 
+                    grid: { color: '#21262d' },
+                    title: { display: true, text: 'Times slower than baseline', color: '#8b949e' }
+                }
+            }
+        }
+    });
+
+    // Table
+    const maxMs = Math.max(...data.map(d => d.avgMs));
+    const table = document.getElementById('resultsTable');
+    table.innerHTML = `
+        <tr>
+            <th>Scenario</th>
+            <th>Segments</th>
+            <th>Avg (ms)</th>
+            <th>Min (ms)</th>
+            <th>Max (ms)</th>
+            <th>Slowdown</th>
+            <th>Relative</th>
+        </tr>
+        ${data.map(d => {
+            const f = (d.avgMs / baseline).toFixed(1);
+            const cls = getColor(d.avgMs, baseline);
+            const pct = Math.round((d.avgMs / maxMs) * 100);
+            return `
+                <tr>
+                    <td>${d.name}</td>
+                    <td>${d.segments.toLocaleString()}</td>
+                    <td class="${cls}">${d.avgMs.toLocaleString()}</td>
+                    <td>${d.minMs.toLocaleString()}</td>
+                    <td>${d.maxMs.toLocaleString()}</td>
+                    <td class="${cls}">${f}×</td>
+                    <td style="min-width:120px">
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width:${pct}%; background: ${cls === 'highlight' ? '#f85149' : cls === 'warn' ? '#d29922' : '#3fb950'}"></div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('')}
+    `;
+}
+
+// Load sample data on start so page isn't blank
+renderAll(SAMPLE_DATA);
+</script>
+</body>
+</html>
