@@ -1,6 +1,12 @@
-# This aggregates the readings data at day level and above.
-# This should be copied to /etc/ or /etc/cron.daily/ and the copy renamed so that its function will be clear to admins.
-# This should be executed daily after fetching midnight readings, such as 12:30 am.
+# This script forces a refresh of all four reading aggregate materialized views:
+#   hourly_readings_unit, daily_readings_unit,
+#   group_hourly_readings_unit, group_daily_readings_unit
+#
+# The readings table is a TimescaleDB hypertable, but the aggregate views are
+# standard PostgreSQL materialized views and must be refreshed on a schedule.
+# Refresh order matters: hourly must finish before daily, since daily is built on top of it.
+#
+# Copy this file to /etc/cron.daily/ (or equivalent) to run it automatically each night.
 
 # The absolute path the project root directory (OED)
 cd '/example/path/to/project/OED'

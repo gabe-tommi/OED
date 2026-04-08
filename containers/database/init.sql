@@ -9,3 +9,11 @@ DROP DATABASE IF EXISTS oed_testing;
 CREATE DATABASE oed_testing WITH OWNER oed;
 
 ALTER ROLE oed SUPERUSER;
+
+-- Enable TimescaleDB extension for time-series optimization
+-- Must be done per-database to activate hypertable and compression features
+\c oed
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+\c oed_testing
+CREATE EXTENSION IF NOT EXISTS timescaledb;

@@ -16,6 +16,8 @@ services:
             - POSTGRES_PASSWORD=pleaseChange # default postgres password that should be changed for security.
         volumes:
             - ./postgres-data:/var/lib/postgresql/data/pgdata
+        # Shared memory size for TimescaleDB (recommended for large datasets)
+        shm_size: 256mb
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U postgres"]
             interval: 10s
