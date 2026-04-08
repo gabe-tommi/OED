@@ -92,6 +92,23 @@ are already averaged. There are two types of readings: quantity and flow/raw. Th
 readings must be normalized by their time length. The flow/raw readings are already by time
 so they are just averaged. The one table contains both types of readings but are now equivalent
 so the line reading functions can use them both in the same way.
+
+HOW THE VIEWS WORK:
+All four aggregate views (hourly_readings_unit, daily_readings_unit,
+group_hourly_readings_unit, group_daily_readings_unit) are standard PostgreSQL
+materialized views. They are refreshed manually via the cron job or the
+refreshAllReadingViews route.
+
+The hourly view uses CROSS JOIN LATERAL generate_series() to split readings that
+span multiple hours into separate hourly buckets with weighted averages. This is
+why it must stay as a regular materialized view — TimescaleDB continuous aggregates
+do not support LATERAL joins.
+
+The daily and group daily views build on top of the hourly view, so they also
+stay as regular materialized views.
+
+The readings table itself is a TimescaleDB hypertable (see timescaledb_migration.sql),
+which speeds up the hourly view refresh via chunk pruning instead of a full table scan.
  */
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS
@@ -220,23 +237,20 @@ hourly_readings_unit
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS
 daily_readings_unit
-	AS SELECT
-		h.meter_id AS meter_id,
-        avg(h.reading_rate) AS reading_rate,
-		max(h.max_rate) AS max_rate,
-		min(h.min_rate) AS min_rate,
-        
-    tsrange(gen.interval_start, gen.interval_start + '1 day'::INTERVAL, '()') AS time_interval
-	FROM ((hourly_readings_unit h
-	INNER JOIN meters m ON h.meter_id = m.id)
-	INNER JOIN units u ON m.unit_id = u.id)
-		CROSS JOIN LATERAL generate_series(
-			date_trunc('day', lower(h.time_interval)),
-			date_trunc_up('day', upper(h.time_interval)) - '1 hour'::INTERVAL,
-			'1 day'::INTERVAL 
-		) gen(interval_start)
-	GROUP BY h.meter_id, gen.interval_start, u.unit_represent
-	ORDER BY gen.interval_start, h.meter_id;
+AS
+SELECT
+	time_bucket(INTERVAL '1 day', lower(h.time_interval)) AS day_bucket,
+	h.meter_id,
+	AVG(h.reading_rate) AS reading_rate,
+	MAX(h.max_rate) AS max_rate,
+	MIN(h.min_rate) AS min_rate,
+	tsrange(
+		time_bucket(INTERVAL '1 day', lower(h.time_interval)),
+		time_bucket(INTERVAL '1 day', lower(h.time_interval)) + INTERVAL '1 day',
+		'()'
+	) AS time_interval
+FROM hourly_readings_unit h
+GROUP BY day_bucket, h.meter_id;
 
 -- TODO Check if needed and when to use as not done for hourly.
 -- With the index added in 3D readings, this should be consider as part of the decision
@@ -298,21 +312,28 @@ $$ LANGUAGE 'plpgsql';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS
 group_daily_readings_unit
-	AS SELECT
-		gdm.group_id,
-		sum(dr.reading_rate * c.slope + c.intercept) AS reading_rate,
-		dr.time_interval,
-		gu.graphic_unit_id AS graphic_unit_id
-	
-	FROM (((((daily_readings_unit dr
-	INNER JOIN groups_deep_meters gdm ON dr.meter_id = gdm.meter_id)
-	INNER JOIN meters m ON m.id = dr.meter_id)
-	INNER JOIN units u ON m.unit_id = u.id)
-	INNER JOIN cik c on c.source_id = m.unit_id)
-	INNER JOIN unnest(get_graphic_unit(gdm.group_id)) AS gu(graphic_unit_id) ON c.destination_id = gu.graphic_unit_id)
-	-- group meter readings of each group on the the same day, of the same graphic unit
-	GROUP BY gdm.group_id, gu.graphic_unit_id, dr.time_interval -- order by time interval instead
-	ORDER BY dr.time_interval, gu.graphic_unit_id, gdm.group_id;
+AS
+SELECT
+	time_bucket(INTERVAL '1 day', lower(dr.time_interval)) AS day_bucket,
+	gdm.group_id,
+	SUM(dr.reading_rate * c.slope + c.intercept) AS reading_rate,
+	gu.graphic_unit_id,
+	tsrange(
+		time_bucket(INTERVAL '1 day', lower(dr.time_interval)),
+		time_bucket(INTERVAL '1 day', lower(dr.time_interval)) + INTERVAL '1 day',
+		'()'
+	) AS time_interval
+FROM daily_readings_unit dr
+INNER JOIN groups_deep_meters gdm ON dr.meter_id = gdm.meter_id
+INNER JOIN meters m ON m.id = dr.meter_id
+INNER JOIN units u ON m.unit_id = u.id
+INNER JOIN cik c ON c.source_id = m.unit_id
+INNER JOIN LATERAL (
+	SELECT graphic_unit_id
+	FROM unnest(get_graphic_unit(gdm.group_id)) AS gu(graphic_unit_id)
+) gu ON c.destination_id = gu.graphic_unit_id
+GROUP BY day_bucket, gdm.group_id, gu.graphic_unit_id
+ORDER BY day_bucket, gu.graphic_unit_id, gdm.group_id;
 
 -- Index on interval, graphic_unit_id, group_id
 CREATE INDEX if not exists idx_group_daily_readings_unit ON group_daily_readings_unit USING GIST(time_interval, graphic_unit_id, group_id);

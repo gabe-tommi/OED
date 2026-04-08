@@ -44,6 +44,16 @@ class Reading {
 	}
 
 	/**
+	 * Runs the optional Timescale migration script.
+	 * Safe to run multiple times because the SQL uses IF NOT EXISTS checks.
+	 * @param conn the database connection to use
+	 * @returns {Promise<void>}
+	 */
+	static runTimescaleMigration(conn) {
+		return conn.none(sqlFile('reading/timescaledb_migration.sql'));
+	}
+
+	/**
 	 * Returns a promise to create the compare function
 	 * @param conn the database connection to use
 	 */
@@ -80,9 +90,7 @@ class Reading {
 	 * @returns {Promise<void>}
 	 */
 	static refreshHourlyReadings(conn) {
-		// This can't be a function because you can't call REFRESH inside a function
-		// TODO This will be removed once we completely transition to the unit version.
-		return conn.none('REFRESH MATERIALIZED VIEW hourly_readings_unit');
+		return Reading.refreshReadingAggregate(conn, 'hourly_readings_unit');
 	}
 
 	/**
@@ -92,8 +100,31 @@ class Reading {
 	 * @returns {Promise<void>}
 	 */
 	static refreshDailyReadings(conn) {
-		// This can't be a function because you can't call REFRESH inside a function
-		return conn.none('REFRESH MATERIALIZED VIEW daily_readings_unit');
+		return Reading.refreshReadingAggregate(conn, 'daily_readings_unit');
+	}
+
+	/**
+	 * Refreshes one aggregate view name.
+	 * If the view is a Timescale continuous aggregate, use refresh_continuous_aggregate.
+	 * Otherwise fall back to normal materialized view refresh.
+	 * @param conn the connection to use
+	 * @param {string} viewName aggregate view name
+	 * @returns {Promise<void>}
+	 */
+	static async refreshReadingAggregate(conn, viewName) {
+		const isContinuousAggregate = await conn.oneOrNone(
+			`SELECT 1
+			 FROM timescaledb_information.continuous_aggregates
+			 WHERE view_name = $1`,
+			[viewName]
+		);
+
+		if (isContinuousAggregate) {
+			// NULL/NULL means refresh everything currently in the view range.
+			return conn.none('CALL refresh_continuous_aggregate($1, NULL, NULL)', [viewName]);
+		}
+
+		return conn.none(`REFRESH MATERIALIZED VIEW ${viewName}`);
 	}
 	
 	/**
@@ -103,8 +134,9 @@ class Reading {
 	 * @returns {Promise<void>}
 	 */
 	static async refreshMeterReadingsViews(conn) {
-		await conn.none('REFRESH MATERIALIZED VIEW hourly_readings_unit');
-		await conn.none('REFRESH MATERIALIZED VIEW daily_readings_unit');
+		// Daily depends on hourly, so keep this order.
+		await Reading.refreshReadingAggregate(conn, 'hourly_readings_unit');
+		await Reading.refreshReadingAggregate(conn, 'daily_readings_unit');
 	}
 
 
@@ -117,8 +149,10 @@ class Reading {
 	static refreshGroupReadingsViews(conn) {
 		// It is safe to refresh the hourly and daily group views in parallel since they
 		// do not depend one each other unlike meters.
-		return Promise.all([conn.none('REFRESH MATERIALIZED VIEW group_hourly_readings_unit'),
-			conn.none('REFRESH MATERIALIZED VIEW group_daily_readings_unit')]);
+		return Promise.all([
+			Reading.refreshReadingAggregate(conn, 'group_hourly_readings_unit'),
+			Reading.refreshReadingAggregate(conn, 'group_daily_readings_unit')
+		]);
 	}
 
 	/**

@@ -8,19 +8,18 @@ const { log } = require('../log');
 const { getConnection } = require('../db');
 const Reading = require('../models/Reading');
 
-/** 
- * This function is changed from refreshing hourly and daily readings
- * views in parallel using Promise.all() into one by one because
- * daily readings calculation depends on hourly readings.
-*/
+/**
+ * Refreshes all reading aggregate views.
+ * This supports both normal materialized views and Timescale continuous aggregates.
+ */
 async function refreshAllReadingViews() {
 	const conn = getConnection();
 	// Refresh meter readings views
-	log.info('Refreshing Materialized Hourly and Daily Readings Views');
+	log.info('Refreshing meter aggregate reading views');
 	await Reading.refreshMeterReadingsViews(conn);
-	log.info('Materialized Hourly and Daily Readings Views Refreshed');
+	log.info('Meter aggregate reading views refreshed');
 	// Refresh group views
-	log.info('Refreshing Group Reading Views');
+	log.info('Refreshing group aggregate reading views');
 	await Reading.refreshGroupReadingsViews(conn);
 	log.info('refreshAllReadingViews completed');
 }
