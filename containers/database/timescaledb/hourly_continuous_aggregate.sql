@@ -99,7 +99,7 @@ WITH (timescaledb.continuous) AS
 SELECT
     meter_id,
     time_bucket('1 hour', start_timestamp) AS bucket,
-	-- Compute weighted average reading rate, matching the logic in hourly_readings_unit.
+    -- Compute weighted average reading rate, matching the logic in hourly_readings_unit.
     -- quantity readings are converted to a rate per hour using overlap duration as the weight.
     -- flow/raw readings are already normalized to per hour in hypertable_hourly_split.
     CASE WHEN unit_represent = 'quantity'::unit_represent_type THEN
@@ -110,8 +110,17 @@ SELECT
         sum(reading * extract(EPOCH FROM (end_timestamp - start_timestamp))
         ) / sum(extract(EPOCH FROM (end_timestamp - start_timestamp)))
     END AS reading_rate,
-    max(reading) AS max_rate,
-    min(reading) AS min_rate,
+    -- Convert reading to rate before taking max/min, matching the logic in hourly_readings_unit
+    CASE WHEN unit_represent = 'quantity'::unit_represent_type THEN
+        max(reading * 3600 / extract(EPOCH FROM (end_timestamp - start_timestamp)))
+    WHEN (unit_represent = 'flow'::unit_represent_type OR unit_represent = 'raw'::unit_represent_type) THEN
+        max(reading)
+    END AS max_rate,
+    CASE WHEN unit_represent = 'quantity'::unit_represent_type THEN
+        min(reading * 3600 / extract(EPOCH FROM (end_timestamp - start_timestamp)))
+    WHEN (unit_represent = 'flow'::unit_represent_type OR unit_represent = 'raw'::unit_represent_type) THEN
+        min(reading)
+    END AS min_rate,
     unit_represent,
     sec_in_rate
 FROM hypertable_hourly_split
@@ -132,4 +141,24 @@ INNER JOIN hourly_readings_unit_cagg cagg
     ON mv.meter_id = cagg.meter_id
     AND lower(mv.time_interval) = cagg.bucket
 ORDER BY abs(mv.reading_rate - cagg.reading_rate) DESC
+LIMIT 20;
+
+-- Verify accuracy of max_rate and min_rate between the original materialized
+-- view (hourly_readings_unit) and the continuous aggregate (hourly_readings_unit_cagg).
+-- Results are ordered by largest max_rate difference first to surface any inaccuracies.
+-- Differences should be zero or extremely close to zero (floating point rounding only).
+SELECT
+    mv.meter_id,
+    lower(mv.time_interval) AS mv_time,
+    mv.max_rate AS mv_max_rate,
+    cagg.max_rate AS cagg_max_rate,
+    mv.max_rate - cagg.max_rate AS max_difference,
+    mv.min_rate AS mv_min_rate,
+    cagg.min_rate AS cagg_min_rate,
+    mv.min_rate - cagg.min_rate AS min_difference
+FROM hourly_readings_unit mv
+INNER JOIN hourly_readings_unit_cagg cagg
+    ON mv.meter_id = cagg.meter_id
+    AND lower(mv.time_interval) = cagg.bucket
+ORDER BY abs(mv.max_rate - cagg.max_rate) DESC
 LIMIT 20;
