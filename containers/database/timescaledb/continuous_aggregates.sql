@@ -1,3 +1,17 @@
+/*
+ * NOTE: This file is superseded by hourly_continuous_aggregate.sql which
+ * should be used instead. That file handles time intervals properly by
+ * splitting readings that span multiple hours into hourly slices, replicating
+ * the logic of the hourly_readings_unit materialized view accurately.
+ *
+ * This file is kept for reference only, as it demonstrates the basic setup
+ * of a TimescaleDB continuous aggregate before the more accurate approach
+ * was developed. The key limitation here is that readings are not split
+ * across hour boundaries, so a reading spanning multiple hours is assigned
+ * entirely to the bucket of its start_timestamp, which produces different
+ * results from the materialized view.
+ */
+
 -- Create Materialized View with continuous aggregates from hypertable.
 CREATE MATERIALIZED VIEW cagg_hourly_readings_unit
 WITH (timescaledb.continuous) AS
