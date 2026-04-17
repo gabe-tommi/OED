@@ -3,12 +3,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * NOT YET IMPLEMENTED — kept for future reference.
+ * SUPERSEDED — the continuous aggregate implementation has moved.
  *
- * Goal: convert daily reading views to TimescaleDB continuous aggregates so they
- * refresh automatically in the background instead of requiring a cron job.
+ * The hourly and daily continuous aggregates are now implemented in:
+ *   containers/database/timescaledb/continuous_aggregates.sql  (hourly)
+ *   containers/database/timescaledb/daily_continuous_aggregate.sql (daily)
  *
- * Why it doesn't work yet:
+ * These source from readings_hypertable (hourly) and cagg_hourly_readings_unit (daily),
+ * using TimescaleDB hierarchical continuous aggregates rather than converting the
+ * existing OED materialized views.
+ *
+ * Why the original approach in this file didn't work:
  *
  * 1. hourly_readings_unit uses CROSS JOIN LATERAL generate_series() to split readings
  *    that span multiple hours into separate buckets. TimescaleDB continuous aggregates
@@ -22,9 +27,11 @@
  * 3. group_daily_readings_unit also uses a LATERAL join (unnest + get_graphic_unit),
  *    which has the same restriction.
  *
- * To make continuous aggregates work here, the hourly view would need to be rewritten
- * to use time_bucket() directly on the readings hypertable without LATERAL. That would
- * trade a small amount of accuracy (readings crossing an hour boundary) for auto-refresh.
+ * The new approach sidesteps these restrictions by building a parallel set of CAs
+ * (cagg_hourly_readings_unit, cagg_daily_readings_unit) that aggregate directly from
+ * readings_hypertable, independent of the existing OED views.
+ *
+ * The script below is kept for reference only and should NOT be run.
  */
 
 -- Step 1: Check if TimescaleDB extension is available
