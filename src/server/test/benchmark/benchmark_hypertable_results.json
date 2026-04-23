@@ -3,154 +3,154 @@
     "name": "1 segment (no variation)",
     "segments": 1,
     "readings": {
-      "avgMs": 161,
-      "minMs": 118,
-      "maxMs": 229,
+      "avgMs": 71,
+      "minMs": 59,
+      "maxMs": 91,
       "rowCount": 35136
     },
     "hypertable": {
-      "avgMs": 504,
-      "minMs": 439,
-      "maxMs": 594,
+      "avgMs": 99,
+      "minMs": 71,
+      "maxMs": 151,
       "rowCount": 35136
     },
     "cagg": {
-      "avgMs": 234,
-      "minMs": 194,
-      "maxMs": 266,
+      "avgMs": 30,
+      "minMs": 22,
+      "maxMs": 40,
       "rowCount": 8784
     }
   },
   {
     "name": "12 segments (monthly)",
-    "segments": 17,
+    "segments": 12,
     "readings": {
-      "avgMs": 135,
-      "minMs": 124,
-      "maxMs": 146,
+      "avgMs": 72,
+      "minMs": 70,
+      "maxMs": 74,
       "rowCount": 35136
     },
     "hypertable": {
-      "avgMs": 509,
-      "minMs": 470,
-      "maxMs": 578,
+      "avgMs": 93,
+      "minMs": 92,
+      "maxMs": 94,
       "rowCount": 35136
     },
     "cagg": {
-      "avgMs": 210,
-      "minMs": 188,
-      "maxMs": 223,
+      "avgMs": 23,
+      "minMs": 20,
+      "maxMs": 27,
       "rowCount": 8784
     }
   },
   {
     "name": "52 segments (weekly)",
-    "segments": 51,
+    "segments": 53,
     "readings": {
-      "avgMs": 243,
-      "minMs": 241,
-      "maxMs": 247,
-      "rowCount": 34272
+      "avgMs": 241,
+      "minMs": 234,
+      "maxMs": 256,
+      "rowCount": 35136
     },
     "hypertable": {
-      "avgMs": 525,
-      "minMs": 504,
-      "maxMs": 554,
-      "rowCount": 34272
+      "avgMs": 177,
+      "minMs": 170,
+      "maxMs": 191,
+      "rowCount": 35136
     },
     "cagg": {
-      "avgMs": 214,
-      "minMs": 208,
-      "maxMs": 223,
-      "rowCount": 8568
+      "avgMs": 47,
+      "minMs": 47,
+      "maxMs": 47,
+      "rowCount": 8784
     }
   },
   {
     "name": "365 segments (daily)",
-    "segments": 365,
+    "segments": 366,
     "readings": {
-      "avgMs": 1215,
-      "minMs": 1199,
-      "maxMs": 1223,
-      "rowCount": 35040
+      "avgMs": 1433,
+      "minMs": 1380,
+      "maxMs": 1526,
+      "rowCount": 35136
     },
     "hypertable": {
-      "avgMs": 997,
-      "minMs": 952,
-      "maxMs": 1039,
-      "rowCount": 35040
+      "avgMs": 771,
+      "minMs": 767,
+      "maxMs": 776,
+      "rowCount": 35136
     },
     "cagg": {
-      "avgMs": 337,
-      "minMs": 322,
-      "maxMs": 367,
-      "rowCount": 8760
+      "avgMs": 202,
+      "minMs": 200,
+      "maxMs": 203,
+      "rowCount": 8784
     }
   },
   {
     "name": "2160 segments (every 4 hours)",
-    "segments": 2190,
+    "segments": 2191,
     "readings": {
-      "avgMs": 7145,
-      "minMs": 6883,
-      "maxMs": 7382,
-      "rowCount": 35040
+      "avgMs": 7060,
+      "minMs": 6894,
+      "maxMs": 7145,
+      "rowCount": 35056
     },
     "hypertable": {
-      "avgMs": 7127,
-      "minMs": 7022,
-      "maxMs": 7327,
-      "rowCount": 35040
+      "avgMs": 3401,
+      "minMs": 3200,
+      "maxMs": 3636,
+      "rowCount": 35056
     },
     "cagg": {
-      "avgMs": 2392,
-      "minMs": 2212,
-      "maxMs": 2746,
-      "rowCount": 8760
+      "avgMs": 1225,
+      "minMs": 1135,
+      "maxMs": 1351,
+      "rowCount": 8764
     }
   },
   {
     "name": "8760 segments (hourly)",
-    "segments": 8760,
+    "segments": 8761,
     "readings": {
-      "avgMs": 27962,
-      "minMs": 27461,
-      "maxMs": 28732,
-      "rowCount": 35040
+      "avgMs": 28965,
+      "minMs": 27550,
+      "maxMs": 30962,
+      "rowCount": 35044
     },
     "hypertable": {
-      "avgMs": 12008,
-      "minMs": 11983,
-      "maxMs": 12031,
-      "rowCount": 35040
+      "avgMs": 12284,
+      "minMs": 11916,
+      "maxMs": 12593,
+      "rowCount": 35044
     },
     "cagg": {
-      "avgMs": 3393,
-      "minMs": 3253,
-      "maxMs": 3641,
-      "rowCount": 8760
+      "avgMs": 3466,
+      "minMs": 3368,
+      "maxMs": 3636,
+      "rowCount": 8761
     }
   },
   {
     "name": "17520 segments (every 30 min)",
-    "segments": 17520,
+    "segments": 17521,
     "readings": {
-      "avgMs": 55703,
-      "minMs": 54885,
-      "maxMs": 56578,
-      "rowCount": 35040
+      "avgMs": 57560,
+      "minMs": 55837,
+      "maxMs": 59052,
+      "rowCount": 35042
     },
     "hypertable": {
-      "avgMs": 24664,
-      "minMs": 24209,
-      "maxMs": 25424,
-      "rowCount": 35040
+      "avgMs": 24242,
+      "minMs": 23228,
+      "maxMs": 25351,
+      "rowCount": 35042
     },
     "cagg": {
-      "avgMs": 6391,
-      "minMs": 6213,
-      "maxMs": 6702,
-      "rowCount": 17520
+      "avgMs": 6855,
+      "minMs": 6742,
+      "maxMs": 6996,
+      "rowCount": 17521
     }
   }
 ]

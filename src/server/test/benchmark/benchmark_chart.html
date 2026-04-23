@@ -59,15 +59,15 @@
 <script>
 let charts = {};
 
-const SAMPLE = [
-    {"name":"1 segment","segments":1,"readings":{"avgMs":66,"minMs":56,"maxMs":79,"rowCount":35047},"hypertable":{"avgMs":62,"minMs":55,"maxMs":70,"rowCount":35047},"cagg":{"avgMs":18,"minMs":15,"maxMs":22,"rowCount":8760}},
-    {"name":"12 segments (monthly)","segments":12,"readings":{"avgMs":64,"minMs":63,"maxMs":65,"rowCount":35047},"hypertable":{"avgMs":60,"minMs":58,"maxMs":63,"rowCount":35047},"cagg":{"avgMs":20,"minMs":18,"maxMs":23,"rowCount":8760}},
-    {"name":"52 segments (weekly)","segments":52,"readings":{"avgMs":225,"minMs":223,"maxMs":226,"rowCount":35047},"hypertable":{"avgMs":180,"minMs":175,"maxMs":186,"rowCount":35047},"cagg":{"avgMs":55,"minMs":52,"maxMs":59,"rowCount":8760}},
-    {"name":"365 segments (daily)","segments":365,"readings":{"avgMs":1439,"minMs":1410,"maxMs":1464,"rowCount":35047},"hypertable":{"avgMs":950,"minMs":930,"maxMs":975,"rowCount":35047},"cagg":{"avgMs":280,"minMs":270,"maxMs":295,"rowCount":8760}},
-    {"name":"2160 segments (4hr)","segments":2160,"readings":{"avgMs":8717,"minMs":8450,"maxMs":9183,"rowCount":35047},"hypertable":{"avgMs":5200,"minMs":5050,"maxMs":5400,"rowCount":35047},"cagg":{"avgMs":1400,"minMs":1350,"maxMs":1460,"rowCount":8760}},
-    {"name":"8760 segments (hourly)","segments":8760,"readings":{"avgMs":33864,"minMs":33536,"maxMs":34090,"rowCount":35047},"hypertable":{"avgMs":18000,"minMs":17600,"maxMs":18500,"rowCount":35047},"cagg":{"avgMs":5200,"minMs":5050,"maxMs":5400,"rowCount":8760}},
-    {"name":"17520 segments (30min)","segments":17520,"readings":{"avgMs":68464,"minMs":67677,"maxMs":69131,"rowCount":35047},"hypertable":{"avgMs":34000,"minMs":33200,"maxMs":35100,"rowCount":35047},"cagg":{"avgMs":9800,"minMs":9500,"maxMs":10200,"rowCount":8760}}
-];
+// const SAMPLE = [
+//     {"name":"1 segment","segments":1,"readings":{"avgMs":66,"minMs":56,"maxMs":79,"rowCount":35047},"hypertable":{"avgMs":62,"minMs":55,"maxMs":70,"rowCount":35047},"cagg":{"avgMs":18,"minMs":15,"maxMs":22,"rowCount":8760}},
+//     {"name":"12 segments (monthly)","segments":12,"readings":{"avgMs":64,"minMs":63,"maxMs":65,"rowCount":35047},"hypertable":{"avgMs":60,"minMs":58,"maxMs":63,"rowCount":35047},"cagg":{"avgMs":20,"minMs":18,"maxMs":23,"rowCount":8760}},
+//     {"name":"52 segments (weekly)","segments":52,"readings":{"avgMs":225,"minMs":223,"maxMs":226,"rowCount":35047},"hypertable":{"avgMs":180,"minMs":175,"maxMs":186,"rowCount":35047},"cagg":{"avgMs":55,"minMs":52,"maxMs":59,"rowCount":8760}},
+//     {"name":"365 segments (daily)","segments":365,"readings":{"avgMs":1439,"minMs":1410,"maxMs":1464,"rowCount":35047},"hypertable":{"avgMs":950,"minMs":930,"maxMs":975,"rowCount":35047},"cagg":{"avgMs":280,"minMs":270,"maxMs":295,"rowCount":8760}},
+//     {"name":"2160 segments (4hr)","segments":2160,"readings":{"avgMs":8717,"minMs":8450,"maxMs":9183,"rowCount":35047},"hypertable":{"avgMs":5200,"minMs":5050,"maxMs":5400,"rowCount":35047},"cagg":{"avgMs":1400,"minMs":1350,"maxMs":1460,"rowCount":8760}},
+//     {"name":"8760 segments (hourly)","segments":8760,"readings":{"avgMs":33864,"minMs":33536,"maxMs":34090,"rowCount":35047},"hypertable":{"avgMs":18000,"minMs":17600,"maxMs":18500,"rowCount":35047},"cagg":{"avgMs":5200,"minMs":5050,"maxMs":5400,"rowCount":8760}},
+//     {"name":"17520 segments (30min)","segments":17520,"readings":{"avgMs":68464,"minMs":67677,"maxMs":69131,"rowCount":35047},"hypertable":{"avgMs":34000,"minMs":33200,"maxMs":35100,"rowCount":35047},"cagg":{"avgMs":9800,"minMs":9500,"maxMs":10200,"rowCount":8760}}
+// ];
 
 function loadData() {
     const input = document.getElementById('jsonInput').value.trim();

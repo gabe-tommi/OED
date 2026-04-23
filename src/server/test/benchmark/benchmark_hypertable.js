@@ -153,32 +153,32 @@ const SCENARIOS = [
     {
         name: '12 segments (monthly)',
         segments: 12,
-        insert: makeSegmentInsert('1 month', '2020-01-01', '2021-05-01')
+        insert: makeSegmentInsert('1 month', '2020-01-01', '2020-12-31')
     },
     {
         name: '52 segments (weekly)',
         segments: 52,
-        insert: makeSegmentInsert('1 week', '2020-01-01', '2020-12-21')
+        insert: makeSegmentInsert('1 week', '2020-01-01', '2020-12-31')
     },
     {
         name: '365 segments (daily)',
         segments: 365,
-        insert: makeSegmentInsert('1 day', '2020-01-01', '2020-12-30')
+        insert: makeSegmentInsert('1 day', '2020-01-01', '2020-12-31')
     },
     {
         name: '2160 segments (every 4 hours)',
         segments: 2160,
-        insert: makeSegmentInsert('4 hours', '2020-01-01', '2020-12-30 20:00:00')
+        insert: makeSegmentInsert('4 hours', '2020-01-01', '2020-12-31')
     },
     {
         name: '8760 segments (hourly)',
         segments: 8760,
-        insert: makeSegmentInsert('1 hour', '2020-01-01', '2020-12-30 23:00:00')
+        insert: makeSegmentInsert('1 hour', '2020-01-01', '2020-12-31')
     },
     {
         name: '17520 segments (every 30 min)',
         segments: 17520,
-        insert: makeSegmentInsert('30 minutes', '2020-01-01', '2020-12-30 23:30:00')
+        insert: makeSegmentInsert('30 minutes', '2020-01-01', '2020-12-31')
     }
 ];
 

@@ -44,6 +44,7 @@
 		"generateSineSquaredTestingData": "node -e 'require(\"./src/server/data/automatedTestingData\").generateSineSquaredTestingData(2.5)'",
 		"generateCosineSquaredTestingData": "node -e 'require(\"./src/server/data/automatedTestingData\").generateCosineSquaredTestingData(2.5)'",
 		"generateTestingData": "node -e 'require(\"./src/server/data/automatedTestingData\").generateTestingData()'",
+		"benchmarkHourlyRefresh": "node ./src/server/test/benchmark/benchmark_hourly_refresh.js",
 		"testData": "node -e 'require(\"./src/server/data/automatedTestingData.js\").insertSpecialUnitsConversionsMetersGroups()'",
 		"webData": "node -e 'require(\"./src/server/data/websiteData.js\").insertWebsiteData()'"
 	},
