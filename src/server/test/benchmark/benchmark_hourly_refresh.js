@@ -60,6 +60,8 @@
  * the docker image.
  */
 
+process.env.TZ = 'UTC';
+
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');

@@ -1,0 +1,204 @@
+{
+  "meta": {
+    "generatedAt": "2026-04-24T17:31:14.369Z",
+    "meterId": 1,
+    "sourceId": 4,
+    "destinationId": 11,
+    "baseReadingCount": 40136,
+    "baseMinStart": "2020-01-01 00:00:00.000+00:00",
+    "baseMaxEnd": "2025-02-21 01:00:00.000+00:00",
+    "insertBatchSize": 5000
+  },
+  "results": [
+    {
+      "name": "Append 1 hour after latest data",
+      "phaseCount": 1,
+      "insertedRows": 4,
+      "totalInsertMs": 1,
+      "totalRefreshMs": 15,
+      "totalUpdateMs": 17,
+      "hypertableBytesDelta": 0,
+      "caggBytesDelta": 0,
+      "totalBytesDelta": 0,
+      "hypertableBytesDeltaMiB": 0,
+      "caggBytesDeltaMiB": 0,
+      "totalBytesDeltaMiB": 0,
+      "chunkDelta": 0,
+      "hypertableChunksBefore": 75,
+      "hypertableChunksAfter": 75,
+      "materializedRows": 1,
+      "phases": [
+        {
+          "name": "append 1 hour",
+          "insertedRows": 4,
+          "insertMs": 1,
+          "refreshMs": 15,
+          "totalMs": 17,
+          "rangeStart": "2025-02-21 01:00:00.000+00:00",
+          "rangeEndExclusive": "2025-02-21 03:00:00.000+00:00",
+          "materializedRows": 1
+        }
+      ]
+    },
+    {
+      "name": "Backfill 1 hour two years before earliest data",
+      "phaseCount": 1,
+      "insertedRows": 4,
+      "totalInsertMs": 1,
+      "totalRefreshMs": 4,
+      "totalUpdateMs": 5,
+      "hypertableBytesDelta": 0,
+      "caggBytesDelta": 0,
+      "totalBytesDelta": 0,
+      "hypertableBytesDeltaMiB": 0,
+      "caggBytesDeltaMiB": 0,
+      "totalBytesDeltaMiB": 0,
+      "chunkDelta": 0,
+      "hypertableChunksBefore": 75,
+      "hypertableChunksAfter": 75,
+      "materializedRows": 1,
+      "phases": [
+        {
+          "name": "backfill 1 hour",
+          "insertedRows": 4,
+          "insertMs": 1,
+          "refreshMs": 4,
+          "totalMs": 5,
+          "rangeStart": "2018-01-01 00:00:00.000+00:00",
+          "rangeEndExclusive": "2018-01-01 02:00:00.000+00:00",
+          "materializedRows": 1
+        }
+      ]
+    },
+    {
+      "name": "Future gap then add before it with gap",
+      "phaseCount": 2,
+      "insertedRows": 8,
+      "totalInsertMs": 10,
+      "totalRefreshMs": 12,
+      "totalUpdateMs": 22,
+      "hypertableBytesDelta": 0,
+      "caggBytesDelta": 0,
+      "totalBytesDelta": 0,
+      "hypertableBytesDeltaMiB": 0,
+      "caggBytesDeltaMiB": 0,
+      "totalBytesDeltaMiB": 0,
+      "chunkDelta": 2,
+      "hypertableChunksBefore": 75,
+      "hypertableChunksAfter": 77,
+      "materializedRows": 2,
+      "phases": [
+        {
+          "name": "future gap block",
+          "insertedRows": 4,
+          "insertMs": 6,
+          "refreshMs": 6,
+          "totalMs": 12,
+          "rangeStart": "2025-08-20 01:00:00.000+00:00",
+          "rangeEndExclusive": "2025-08-20 03:00:00.000+00:00",
+          "materializedRows": 1
+        },
+        {
+          "name": "pre-gap block",
+          "insertedRows": 4,
+          "insertMs": 4,
+          "refreshMs": 5,
+          "totalMs": 10,
+          "rangeStart": "2025-05-22 01:00:00.000+00:00",
+          "rangeEndExclusive": "2025-05-22 03:00:00.000+00:00",
+          "materializedRows": 1
+        }
+      ]
+    },
+    {
+      "name": "Append 1 day block",
+      "phaseCount": 1,
+      "insertedRows": 96,
+      "totalInsertMs": 5,
+      "totalRefreshMs": 3,
+      "totalUpdateMs": 8,
+      "hypertableBytesDelta": 0,
+      "caggBytesDelta": 0,
+      "totalBytesDelta": 0,
+      "hypertableBytesDeltaMiB": 0,
+      "caggBytesDeltaMiB": 0,
+      "totalBytesDeltaMiB": 0,
+      "chunkDelta": 1,
+      "hypertableChunksBefore": 77,
+      "hypertableChunksAfter": 78,
+      "materializedRows": 24,
+      "phases": [
+        {
+          "name": "append 1 day",
+          "insertedRows": 96,
+          "insertMs": 5,
+          "refreshMs": 3,
+          "totalMs": 8,
+          "rangeStart": "2025-02-28 01:00:00.000+00:00",
+          "rangeEndExclusive": "2025-03-01 02:00:00.000+00:00",
+          "materializedRows": 24
+        }
+      ]
+    },
+    {
+      "name": "Append 30 day block",
+      "phaseCount": 1,
+      "insertedRows": 2880,
+      "totalInsertMs": 47,
+      "totalRefreshMs": 12,
+      "totalUpdateMs": 59,
+      "hypertableBytesDelta": 0,
+      "caggBytesDelta": 0,
+      "totalBytesDelta": 0,
+      "hypertableBytesDeltaMiB": 0,
+      "caggBytesDeltaMiB": 0,
+      "totalBytesDeltaMiB": 0,
+      "chunkDelta": 5,
+      "hypertableChunksBefore": 78,
+      "hypertableChunksAfter": 83,
+      "materializedRows": 720,
+      "phases": [
+        {
+          "name": "append 30 days",
+          "insertedRows": 2880,
+          "insertMs": 47,
+          "refreshMs": 12,
+          "totalMs": 59,
+          "rangeStart": "2025-03-23 01:00:00.000+00:00",
+          "rangeEndExclusive": "2025-04-22 02:00:00.000+00:00",
+          "materializedRows": 720
+        }
+      ]
+    },
+    {
+      "name": "Append full available history (~1 year)",
+      "phaseCount": 1,
+      "insertedRows": 43128,
+      "totalInsertMs": 569,
+      "totalRefreshMs": 134,
+      "totalUpdateMs": 703,
+      "hypertableBytesDelta": 0,
+      "caggBytesDelta": 0,
+      "totalBytesDelta": 0,
+      "hypertableBytesDeltaMiB": 0,
+      "caggBytesDeltaMiB": 0,
+      "totalBytesDeltaMiB": 0,
+      "chunkDelta": 73,
+      "hypertableChunksBefore": 83,
+      "hypertableChunksAfter": 156,
+      "materializedRows": 10782,
+      "phases": [
+        {
+          "name": "append full history",
+          "insertedRows": 43128,
+          "insertMs": 569,
+          "refreshMs": 134,
+          "totalMs": 703,
+          "rangeStart": "2027-02-21 01:00:00.000+00:00",
+          "rangeEndExclusive": "2034-10-10 04:00:00.000+00:00",
+          "materializedRows": 10782
+        }
+      ]
+    }
+  ]
+}

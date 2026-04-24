@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OED Timescale Update Patterns Benchmark</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Courier New', monospace; background: #0d1117; color: #e6edf3; min-height: 100vh; padding: 40px; }
+        header { margin-bottom: 40px; }
+        header h1 { font-size: 1.4rem; font-weight: normal; color: #58a6ff; letter-spacing: 0.05em; text-transform: uppercase; }
+        header p { color: #8b949e; font-size: 0.85rem; margin-top: 6px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 24px; }
+        .card.full { grid-column: 1 / -1; }
+        .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: #8b949e; margin-bottom: 20px; }
+        .chart-container { position: relative; height: 320px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        th { text-align: left; padding: 8px 12px; color: #8b949e; font-weight: normal; border-bottom: 1px solid #30363d; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 10px 12px; border-bottom: 1px solid #21262d; color: #e6edf3; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        td.good { color: #3fb950; }
+        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+        .stat { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 16px; }
+        .stat .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: #8b949e; margin-bottom: 8px; }
+        .stat .value { font-size: 1.5rem; color: #58a6ff; }
+        .stat .unit { font-size: 0.75rem; color: #8b949e; margin-left: 4px; }
+        .paste-area { width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 4px; color: #e6edf3; font-family: 'Courier New', monospace; font-size: 0.8rem; padding: 12px; resize: vertical; min-height: 100px; }
+        .paste-area:focus { outline: 1px solid #58a6ff; }
+        button { margin-top: 12px; background: #238636; border: 1px solid #2ea043; color: #fff; font-family: 'Courier New', monospace; font-size: 0.85rem; padding: 8px 20px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2ea043; }
+        .error { color: #f85149; font-size: 0.8rem; margin-top: 8px; }
+        .legend { display: flex; gap: 20px; margin-bottom: 16px; font-size: 0.78rem; color: #8b949e; }
+        .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+        .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 0.78rem; color: #8b949e; margin-bottom: 12px; }
+        .phase-list { font-size: 0.78rem; color: #8b949e; line-height: 1.5; }
+        .task-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; font-size: 0.76rem; color: #8b949e; }
+        .task-stat { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 10px; }
+        .task-stat strong { display: block; color: #e6edf3; font-size: 0.92rem; margin-top: 4px; }
+        .section-title { grid-column: 1 / -1; color: #8b949e; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; margin: 6px 0 -6px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>OED // Timescale Update Patterns Benchmark</h1>
+    <p>Measures single-meter hypertable insert cost, cagg refresh cost, and storage growth for append, backfill, gap, and large-block scenarios.</p>
+</header>
+
+<div class="card full" style="margin-bottom: 24px;">
+    <h2>Paste benchmark_cagg_update_patterns_results.json</h2>
+    <textarea class="paste-area" id="jsonInput" placeholder='{"meta":{"meterId":1},"results":[{"name":"Append 1 hour after latest data","insertedRows":4,"totalInsertMs":10,"totalRefreshMs":7,"totalUpdateMs":17,"hypertableBytesDeltaMiB":0.01,"caggBytesDeltaMiB":0.01,"chunkDelta":0,"materializedRows":2,"phases":[{"name":"append 1 hour"}]}]}'></textarea>
+    <button onclick="loadData()">Load Results</button>
+    <div class="error" id="error"></div>
+</div>
+
+<div class="card full" id="metaCard" style="display:none; margin-bottom:24px;">
+    <h2>Benchmark Context</h2>
+    <div class="meta" id="meta"></div>
+</div>
+
+<div class="stat-grid" id="stats"></div>
+<div class="grid" id="charts"></div>
+
+<script>
+let charts = {};
+
+function formatNumber(value) {
+    return Number(value).toLocaleString();
+}
+
+function friendlyTaskTitle(name, index) {
+    const labels = {
+        'Append 1 hour after latest data': 'Add One New Hour After Latest Reading',
+        'Backfill 1 hour two years before earliest data': 'Backfill One Hour Two Years Earlier',
+        'Future gap then add before it with gap': 'Insert Across Future Gaps',
+        'Append 1 day block': 'Append One Day Of Data',
+        'Append 30 day block': 'Append Thirty Days Of Data',
+        'Append full available history (~1 year)': 'Append Full Available History'
+    };
+    return `Task ${index + 1}: ${labels[name] || name}`;
+}
+
+function getStorageUnit(data) {
+    const maxBytes = Math.max(...data.map(d => Math.max(d.hypertableBytesDelta || 0, d.caggBytesDelta || 0)));
+    if (maxBytes >= 1024 * 1024) {
+        return { label: 'MiB', divisor: 1024 * 1024, decimals: 2 };
+    }
+    if (maxBytes >= 1024) {
+        return { label: 'KiB', divisor: 1024, decimals: 2 };
+    }
+    return { label: 'bytes', divisor: 1, decimals: 0 };
+}
+
+function scaleBytes(value, unit) {
+    return Number((value / unit.divisor).toFixed(unit.decimals));
+}
+
+function loadData() {
+    const input = document.getElementById('jsonInput').value.trim();
+    const errorEl = document.getElementById('error');
+    errorEl.textContent = '';
+    let payload;
+    try {
+        payload = JSON.parse(input);
+        if (!payload.results || !Array.isArray(payload.results)) {
+            throw new Error('Expected an object with a results array');
+        }
+        if (!payload.results[0] || payload.results[0].totalUpdateMs === undefined) {
+            throw new Error('Missing benchmark result fields');
+        }
+    } catch (e) {
+        errorEl.textContent = 'Invalid JSON: ' + e.message;
+        return;
+    }
+    renderAll(payload);
+}
+
+function renderAll(payload) {
+    const data = payload.results;
+    const meta = payload.meta || {};
+    const gc = '#21262d';
+    const tc = '#8b949e';
+    const labels = data.map(d => d.name);
+    const storageUnit = getStorageUnit(data);
+
+    const worstUpdate = data.reduce((acc, row) => row.totalUpdateMs > acc.totalUpdateMs ? row : acc, data[0]);
+    const biggestChunk = data.reduce((acc, row) => row.chunkDelta > acc.chunkDelta ? row : acc, data[0]);
+    const biggestInsert = data.reduce((acc, row) => row.insertedRows > acc.insertedRows ? row : acc, data[0]);
+
+    const metaCard = document.getElementById('metaCard');
+    if (Object.keys(meta).length > 0) {
+        metaCard.style.display = 'block';
+        document.getElementById('meta').innerHTML = `
+            <div>meter_id: ${meta.meterId ?? 'n/a'}</div>
+            <div>source_id: ${meta.sourceId ?? 'n/a'}</div>
+            <div>destination_id: ${meta.destinationId ?? 'n/a'}</div>
+            <div>base readings: ${meta.baseReadingCount ?? 'n/a'}</div>
+            <div>history range: ${meta.baseMinStart ?? 'n/a'} -> ${meta.baseMaxEnd ?? 'n/a'}</div>
+            <div>insert batch size: ${meta.insertBatchSize ?? 'n/a'}</div>
+        `;
+    } else {
+        metaCard.style.display = 'none';
+    }
+
+    document.getElementById('stats').innerHTML = `
+        <div class="stat"><div class="label">Worst Update</div><div class="value">${worstUpdate.totalUpdateMs.toLocaleString()}<span class="unit">ms</span></div></div>
+        <div class="stat"><div class="label">Biggest Chunk Growth</div><div class="value">${biggestChunk.chunkDelta}<span class="unit">chunks</span></div></div>
+        <div class="stat"><div class="label">Largest Insert</div><div class="value">${biggestInsert.insertedRows.toLocaleString()}<span class="unit">rows</span></div></div>
+    `;
+
+    const chartsEl = document.getElementById('charts');
+    const taskCards = data.map((d, index) => `
+        <div class="card">
+            <h2>${friendlyTaskTitle(d.name, index)}</h2>
+            <div class="task-stats">
+                <div class="task-stat">Inserted Rows<strong>${formatNumber(d.insertedRows)}</strong></div>
+                <div class="task-stat">Total Update<strong>${formatNumber(d.totalUpdateMs)}ms</strong></div>
+                <div class="task-stat">Chunk Delta<strong>${formatNumber(d.chunkDelta)}</strong></div>
+                <div class="task-stat">Space Delta<strong>${formatNumber(scaleBytes(d.totalBytesDelta, storageUnit))} ${storageUnit.label}</strong></div>
+            </div>
+            <div class="chart-container"><canvas id="taskChart${index}"></canvas></div>
+        </div>
+    `).join('');
+
+    chartsEl.innerHTML = `
+        <div class="section-title">Task Graphs</div>
+        ${taskCards}
+        <div class="section-title">Supplementary Comparison Graphs</div>
+        <div class="card full">
+            <h2>Overall Update Time By Task</h2>
+            <div class="legend">
+                <span><span class="legend-dot" style="background:#58a6ff"></span>insert + refresh total</span>
+            </div>
+            <div class="chart-container"><canvas id="updateChart"></canvas></div>
+        </div>
+        <div class="card">
+            <h2>Hypertable Chunk Growth By Task</h2>
+            <div class="chart-container"><canvas id="chunkChart"></canvas></div>
+        </div>
+        <div class="card">
+            <h2>Hourly Aggregate Rows Updated By Task</h2>
+            <div class="chart-container"><canvas id="rowChart"></canvas></div>
+        </div>
+        <div class="card full">
+            <h2>Results Table</h2>
+            <table id="resultsTable"></table>
+        </div>
+    `;
+
+    Object.values(charts).forEach(chart => chart.destroy());
+    charts = {};
+
+    data.forEach((d, index) => {
+        charts[`task${index}`] = new Chart(document.getElementById(`taskChart${index}`), {
+            type: 'bar',
+            data: {
+                labels: d.phases.map(phase => phase.name),
+                datasets: [
+                    {
+                        label: 'insert',
+                        data: d.phases.map(phase => phase.insertMs),
+                        backgroundColor: 'rgba(88,166,255,0.8)'
+                    },
+                    {
+                        label: 'refresh',
+                        data: d.phases.map(phase => phase.refreshMs),
+                        backgroundColor: 'rgba(63,185,80,0.8)'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: tc } },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: items => {
+                                const phase = d.phases[items[0].dataIndex];
+                                return [
+                                    `name: ${phase.name}`,
+                                    `rows: ${formatNumber(phase.insertedRows)}`,
+                                    `window: ${phase.rangeStart} -> ${phase.rangeEndExclusive}`,
+                                    `cagg rows: ${formatNumber(phase.materializedRows)}`
+                                ];
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: tc },
+                        grid: { color: gc },
+                        title: { display: true, text: 'Task Phase', color: tc }
+                    },
+                    y: {
+                        ticks: { color: tc, callback: v => v + 'ms' },
+                        grid: { color: gc },
+                        title: { display: true, text: 'Time (ms)', color: tc }
+                    }
+                }
+            }
+        });
+    });
+
+    charts.update = new Chart(document.getElementById('updateChart'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'total update time',
+                    data: data.map(d => d.totalUpdateMs),
+                    borderColor: '#58a6ff',
+                    backgroundColor: 'rgba(88,166,255,0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 5
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: tc } } },
+            scales: {
+                x: {
+                    ticks: { color: tc },
+                    grid: { color: gc },
+                    title: { display: true, text: 'Benchmark Task', color: tc }
+                },
+                y: {
+                    ticks: { color: tc, callback: v => v + 'ms' },
+                    grid: { color: gc },
+                    title: { display: true, text: 'Total Update Time (ms)', color: tc }
+                }
+            }
+        }
+    });
+
+    charts.chunk = new Chart(document.getElementById('chunkChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'chunk delta', data: data.map(d => d.chunkDelta), backgroundColor: 'rgba(248,81,73,0.75)' }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: tc } } },
+            scales: {
+                x: {
+                    ticks: { color: tc },
+                    grid: { color: gc },
+                    title: { display: true, text: 'Benchmark Task', color: tc }
+                },
+                y: {
+                    ticks: { color: tc },
+                    grid: { color: gc },
+                    title: { display: true, text: 'New Hypertable Chunks', color: tc }
+                }
+            }
+        }
+    });
+
+    charts.row = new Chart(document.getElementById('rowChart'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: 'materialized hourly rows', data: data.map(d => d.materializedRows), borderColor: '#3fb950', tension: 0.3, pointRadius: 5 }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: tc } } },
+            scales: {
+                x: {
+                    ticks: { color: tc },
+                    grid: { color: gc },
+                    title: { display: true, text: 'Benchmark Task', color: tc }
+                },
+                y: {
+                    ticks: { color: tc },
+                    grid: { color: gc },
+                    title: { display: true, text: 'Hourly Aggregate Rows', color: tc }
+                }
+            }
+        }
+    });
+
+    document.getElementById('resultsTable').innerHTML = `
+        <tr>
+            <th>Scenario</th>
+            <th>Rows</th>
+            <th>Insert</th>
+            <th>Refresh</th>
+            <th>Total</th>
+            <th>HT ${storageUnit.label}</th>
+            <th>Cagg ${storageUnit.label}</th>
+            <th>Chunks</th>
+            <th>Cagg Rows</th>
+            <th>Phases</th>
+        </tr>
+        ${data.map(d => `
+            <tr>
+                <td>${d.name}</td>
+                <td>${d.insertedRows.toLocaleString()}</td>
+                <td>${d.totalInsertMs.toLocaleString()}ms</td>
+                <td>${d.totalRefreshMs.toLocaleString()}ms</td>
+                <td class="good">${d.totalUpdateMs.toLocaleString()}ms</td>
+                <td>${scaleBytes(d.hypertableBytesDelta, storageUnit).toLocaleString()}</td>
+                <td>${scaleBytes(d.caggBytesDelta, storageUnit).toLocaleString()}</td>
+                <td>${d.chunkDelta}</td>
+                <td>${d.materializedRows.toLocaleString()}</td>
+                <td class="phase-list">${d.phases.map(p => `${p.name}: ${p.totalMs}ms`).join('<br>')}</td>
+            </tr>
+        `).join('')}
+    `;
+}
+</script>
+</body>
+</html>
