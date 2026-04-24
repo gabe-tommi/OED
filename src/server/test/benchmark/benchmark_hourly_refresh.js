@@ -55,6 +55,9 @@
  * ------
  * Writes benchmark_hourly_refresh_results.json by default.
  * Use src/server/test/benchmark/benchmark_hourly_refresh_chart.html to visualize it.
+ * 
+ * Goes without saying, but don't run this in a dev environment. This is strictly for generated test data only while running
+ * the docker image.
  */
 
 const { Pool } = require('pg');
@@ -71,7 +74,7 @@ const pool = new Pool({
 	port: parseIntegerEnv('DB_PORT', 5432),
 	database: process.env.DB_NAME || 'oed',
 	user: process.env.DB_USER || 'oed',
-	password: process.env.DB_PASSWORD || 'opened'
+	password: process.env.DB_PASSWORD
 });
 
 const OLD_HOURLY_QUERY = `
@@ -116,6 +119,14 @@ const SCENARIOS = [
 	{ name: 'hourly segments', interval: '1 hour' },
 	{ name: '15-minute segments', interval: '15 minutes' }
 ];
+
+/**
+ * Converts and environment variable name to an integer
+ * 
+ * @param {*} name : Environment variable name as String
+ * @param {*} fallback : Return code if parse for name fails (name is undefined or '')
+ * @returns parsed integer 'parsed' on success, or 'fallback' if name is a bad input. 
+ */
 
 function parseIntegerEnv(name, fallback) {
 	const raw = process.env[name];
@@ -165,6 +176,12 @@ function formatTs(dateLike) {
 	return new Date(dateLike).toISOString().replace('T', ' ').replace('Z', '+00:00');
 }
 
+/**
+ * Queries the database for hourly_readings_unit, readings_hypertable, and
+ * cagg_hourly_readings_unit and ensures all are present in the current DB connection environment.
+ * Throws an error if any are missing.
+ * @param {*} client : PoolClient type from PostGres import, init before call
+ */
 async function assertRequiredObjects(client) {
 	const result = await client.query(`
 		SELECT
@@ -183,6 +200,16 @@ async function assertRequiredObjects(client) {
 		throw new Error('Missing cagg_hourly_readings_unit. Run containers/database/timescaledb/continuous_aggregates.sql first.');
 	}
 }
+
+/**
+ * Queries the current DB connection and selects rows from the meters table joined to readings table.
+ * 
+ * If there are no readings for the query above, this errors out and displays the responsible meter id.
+ * 
+ * Then ensures the number  of records in readings_hypertable matches the rows read from the first query for the same meter, only then returns context 
+ * 
+ * @param {*} client : PoolClient type from PostGres import, init before call
+ */
 
 async function loadMeterContext(client) {
 	const meterResult = await client.query(`
@@ -233,6 +260,18 @@ async function loadMeterContext(client) {
 		baseReadingCount: meter.reading_count
 	};
 }
+/**
+ * 
+ * Queries readings for the given meterId between one hour before baseMaxEnd and baseMaxEnd.
+ * then returns a map of readings returned mapped to start and end timestamps.
+ * 
+ * See loadMeterContext for info on these fields.
+ * 
+ * @param {*} client PoolClient type from PostGres import, init before call
+ * @param {*} meterId field from the current meter context
+ * @param {*} baseMaxEndn field from the current meter context
+ * 
+ */
 
 async function loadInsertedRowsTemplate(client, meterId, baseMaxEnd) {
 	const oneHourEarlier = addHours(baseMaxEnd, -1);
@@ -245,16 +284,16 @@ async function loadInsertedRowsTemplate(client, meterId, baseMaxEnd) {
 		ORDER BY start_timestamp
 	`, [meterId, oneHourEarlier, baseMaxEnd]);
 
-	if (result.rowCount === 0) {
-		result = await client.query(`
-			SELECT reading, start_timestamp, end_timestamp
-			FROM readings
-			WHERE meter_id = $1
-			ORDER BY start_timestamp DESC
-			LIMIT 4
-		`, [meterId]);
-		result.rows.reverse();
-	}
+	// if (result.rowCount === 0) {
+	// 	result = await client.query(`
+	// 		SELECT reading, start_timestamp, end_timestamp
+	// 		FROM readings
+	// 		WHERE meter_id = $1
+	// 		ORDER BY start_timestamp DESC
+	// 		LIMIT 4
+	// 	`, [meterId]);
+	// 	result.rows.reverse();
+	// }
 
 	if (result.rowCount === 0) {
 		throw new Error(`Unable to build simulated inserts for meter ${meterId}; no source readings were found.`);
@@ -266,6 +305,16 @@ async function loadInsertedRowsTemplate(client, meterId, baseMaxEnd) {
 		end_timestamp: addMs(row.end_timestamp, INSERT_SHIFT_MS)
 	}));
 }
+
+/**
+ * 
+ * Performs cleanup for the last inserted query, so query after an insert can be simulated
+ * continuously.
+ * 
+ * @param {*} client PoolClient type from PostGres import, init before call
+ * @param {*} meterId received from meter context
+ * @param {*} insertedRows received from inserted rows template
+ */
 
 async function ensureCleanInsertedRange(client, meterId, insertedRows) {
 	const rangeStart = insertedRows[0].start_timestamp;
