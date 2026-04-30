@@ -1,0 +1,7 @@
+{
+  "1 Day":   { "execution": 0.105, "planning": 0.160 },
+  "1 Week":  { "execution": 0.474, "planning": 0.184 },
+  "1 Month": { "execution": 1.273, "planning": 0.196 },
+  "1 Year":  { "execution": 15.370, "planning": 0.158 },
+  "Full":    { "execution": 21.105, "planning": 0.220 }
+}
