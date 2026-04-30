@@ -106,4 +106,3 @@ router.get('/line/raw/meter/:meter_id', optionalAuthMiddleware, async (req, res)
 
 
 module.exports = router;
-
