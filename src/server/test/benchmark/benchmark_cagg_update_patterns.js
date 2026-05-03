@@ -161,7 +161,7 @@ const SCENARIOS = [
 			{
 				name: 'append full history',
 				sourceMode: 'full_history',
-				targetStart: context => addDays(ceilToHour(context.baseMaxEnd), 730)
+				targetStart: context => addDays	(ceilToHour(context.baseMaxEnd), 730)
 			}
 		]
 	}

@@ -44,6 +44,8 @@
 		"generateSineSquaredTestingData": "node -e 'require(\"./src/server/data/automatedTestingData\").generateSineSquaredTestingData(2.5)'",
 		"generateCosineSquaredTestingData": "node -e 'require(\"./src/server/data/automatedTestingData\").generateCosineSquaredTestingData(2.5)'",
 		"generateTestingData": "node -e 'require(\"./src/server/data/automatedTestingData\").generateTestingData()'",
+		"benchmarkBaseline": "node ./src/server/test/benchmark/benchmark.js",
+		"benchmarkHypertable": "node ./src/server/test/benchmark/benchmark_hypertable.js",
 		"benchmarkHourlyRefresh": "node ./src/server/test/benchmark/benchmark_hourly_refresh.js",
 		"benchmarkCaggUpdatePatterns": "node ./src/server/test/benchmark/benchmark_cagg_update_patterns.js",
 		"testData": "node -e 'require(\"./src/server/data/automatedTestingData.js\").insertSpecialUnitsConversionsMetersGroups()'",

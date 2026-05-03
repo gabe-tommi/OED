@@ -1,0 +1,58 @@
+[
+  {
+    "name": "1 segment (no variation)",
+    "segments": 1,
+    "avgMs": 62,
+    "minMs": 55,
+    "maxMs": 76,
+    "rowCount": 35136
+  },
+  {
+    "name": "12 segments (monthly)",
+    "segments": 13,
+    "avgMs": 85,
+    "minMs": 82,
+    "maxMs": 87,
+    "rowCount": 35136
+  },
+  {
+    "name": "52 segments (weekly)",
+    "segments": 53,
+    "avgMs": 256,
+    "minMs": 244,
+    "maxMs": 270,
+    "rowCount": 35136
+  },
+  {
+    "name": "365 segments (daily)",
+    "segments": 367,
+    "avgMs": 1478,
+    "minMs": 1426,
+    "maxMs": 1571,
+    "rowCount": 35136
+  },
+  {
+    "name": "2160 segments (every 4 hours)",
+    "segments": 2197,
+    "avgMs": 6880,
+    "minMs": 6841,
+    "maxMs": 6912,
+    "rowCount": 35136
+  },
+  {
+    "name": "8760 segments (hourly)",
+    "segments": 8785,
+    "avgMs": 27138,
+    "minMs": 26850,
+    "maxMs": 27297,
+    "rowCount": 35136
+  },
+  {
+    "name": "17520 segments (every 30 min)",
+    "segments": 17569,
+    "avgMs": 54028,
+    "minMs": 53649,
+    "maxMs": 54500,
+    "rowCount": 35136
+  }
+]

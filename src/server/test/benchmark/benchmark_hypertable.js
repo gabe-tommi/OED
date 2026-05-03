@@ -1,281 +1,318 @@
 /**
  * OED TimescaleDB Performance Benchmark
  *
- * Compares query performance across three structures:
- *   A) readings                  — original table (baseline)
- *   B) readings_hypertable       — TimescaleDB hypertable
- *   C) cagg_hourly_readings_unit — TimescaleDB continuous aggregate (hourly buckets)
+ * Purpose
+ * -------
+ * This compares the original raw readings table, the Timescale hypertable, and
+ * the hourly continuous aggregate using the same cik_vary overlap join.
  *
- * Same test data as original benchmark:
- *   - 1 year of 15-minute readings for meter_id=1 (~35,040 rows)
- *   - 7 cik_vary segment scenarios from 1 to 17,520 segments
- *   - 3 runs per scenario, reports avg/min/max ms
+ * Run with:
+ *   node src/server/test/benchmark/benchmark_hypertable.js
  *
- * Run with: node benchmark_hypertable.js
- * Requires: npm install pg
- * Output:   benchmark_hypertable_results.json
- * 
- * This required a lot of finagling with the new sql to get it hooked up to pgadmin
- * You could connect directly to the local server and compose up
- * 
+ * Useful environment variables:
+ *   DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+ *   METER_ID
+ *   DEST_ID
+ *   RUNS
+ *   OUTPUT_FILE
  */
+
+process.env.TZ = 'UTC';
 
 const { Pool } = require('pg');
 const fs = require('fs');
+const path = require('path');
+
+const DEFAULT_OUTPUT = path.join(__dirname, 'benchmark_hypertable_results.json');
+const METER_ID = parseIntegerEnv('METER_ID', 1);
+const RUNS = parseIntegerEnv('RUNS', 3);
 
 const pool = new Pool({
-    host: '127.0.0.1',
-    port: 5432,
-    database: 'oed',
-    user: 'oed',
-    password: 'opened'
+	host: process.env.DB_HOST || '127.0.0.1',
+	port: parseIntegerEnv('DB_PORT', 5432),
+	database: process.env.DB_NAME || 'oed',
+	user: process.env.DB_USER || 'oed',
+	password: process.env.DB_PASSWORD || 'opened'
 });
 
-// const SOURCE_ID = 11;
-// const DEST_ID = 1;
-// const METER_ID = 1;
-
-const SOURCE_ID = 4;
-const DEST_ID = 1;
-const METER_ID = 1;
-
-// A: Original readings table (baseline)
 const QUERY_READINGS = `
-    SELECT
-        r.meter_id,
-        r.reading * c.slope + c.intercept AS converted_reading,
-        r.start_timestamp,
-        r.end_timestamp
-    FROM readings r
-    INNER JOIN cik_vary c
-        ON c.source_id = $1
-        AND c.destination_id = $2
-        AND tsrange(c.start_time, c.end_time, '()') && tsrange(r.start_timestamp, r.end_timestamp, '()')
-    WHERE r.meter_id = $3
-    ORDER BY r.start_timestamp;
+	SELECT
+		r.meter_id,
+		r.reading * c.slope + c.intercept AS converted_reading,
+		r.start_timestamp,
+		r.end_timestamp
+	FROM readings r
+	INNER JOIN cik_vary c
+		ON c.source_id = $1
+		AND c.destination_id = $2
+		AND tsrange(c.start_time, c.end_time, '()') && tsrange(r.start_timestamp, r.end_timestamp, '()')
+	WHERE r.meter_id = $3
+	ORDER BY r.start_timestamp;
 `;
 
-// B: Hypertable — same query, different table, TimescaleDB chunking applies
 const QUERY_HYPERTABLE = `
-    SELECT
-        r.meter_id,
-        r.reading * c.slope + c.intercept AS converted_reading,
-        r.start_timestamp,
-        r.end_timestamp
-    FROM readings_hypertable r
-    INNER JOIN cik_vary c
-        ON c.source_id = $1
-        AND c.destination_id = $2
-        AND tsrange(c.start_time, c.end_time, '()') && tsrange(r.start_timestamp, r.end_timestamp, '()')
-    WHERE r.meter_id = $3
-    ORDER BY r.start_timestamp;
+	SELECT
+		r.meter_id,
+		r.reading * c.slope + c.intercept AS converted_reading,
+		r.start_timestamp,
+		r.end_timestamp
+	FROM readings_hypertable r
+	INNER JOIN cik_vary c
+		ON c.source_id = $1
+		AND c.destination_id = $2
+		AND tsrange(c.start_time, c.end_time, '()') && tsrange(r.start_timestamp, r.end_timestamp, '()')
+	WHERE r.meter_id = $3
+	ORDER BY r.start_timestamp;
 `;
 
-// C: Continuous aggregate — 8,760 hourly buckets vs 35,040 raw readings
-// Smaller row count reduces overlap join surface
 const QUERY_CAGG = `
-    SELECT
-        ca.meter_id,
-        ca.reading_rate * c.slope + c.intercept AS converted_reading,
-        ca.time_interval AS start_timestamp
-    FROM cagg_hourly_readings_unit ca
-    INNER JOIN cik_vary c
-        ON c.source_id = $1
-        AND c.destination_id = $2
-        AND tsrange(c.start_time, c.end_time, '()') && tsrange(ca.time_interval, ca.time_interval + interval '1 hour', '()')
-    WHERE ca.meter_id = $3
-    ORDER BY ca.time_interval;
+	SELECT
+		ca.meter_id,
+		ca.reading_rate * c.slope + c.intercept AS converted_reading,
+		ca.time_interval AS start_timestamp
+	FROM cagg_hourly_readings_unit ca
+	INNER JOIN cik_vary c
+		ON c.source_id = $1
+		AND c.destination_id = $2
+		AND tsrange(c.start_time, c.end_time, '()') && tsrange(ca.time_interval, ca.time_interval + interval '1 hour', '()')
+	WHERE ca.meter_id = $3
+	ORDER BY ca.time_interval;
 `;
 
-function makeSegmentInsert(intervalStr, startDate, endDate) {
-    return `
-        INSERT INTO cik_vary (source_id, destination_id, start_time, end_time, slope, intercept)
-        SELECT
-            ${SOURCE_ID}, ${DEST_ID},
-            gs AS start_time,
-            gs + '${intervalStr}'::interval AS end_time,
-            0.08 + random() * 0.08 AS slope,
-            0
-        FROM generate_series(
-            '${startDate}'::timestamp,
-            '${endDate}'::timestamp,
-            '${intervalStr}'::interval
-        ) gs;
-    `;
-}
-
-// const SCENARIOS = [
-//     {
-//         name: '1 segment (no variation)',
-//         segments: 1,
-//         insert: `INSERT INTO cik_vary (source_id, destination_id, start_time, end_time, slope, intercept)
-//                  VALUES (${SOURCE_ID}, ${DEST_ID}, '-infinity', 'infinity', 0.12, 0);`
-//     },
-//     {
-//         name: '12 segments (monthly)',
-//         segments: 12,
-//         insert: makeSegmentInsert('1 month', '2024-01-01', '2024-11-01')
-//     },
-//     {
-//         name: '52 segments (weekly)',
-//         segments: 52,
-//         insert: makeSegmentInsert('1 week', '2024-01-01', '2024-12-23')
-//     },
-//     {
-//         name: '365 segments (daily)',
-//         segments: 365,
-//         insert: makeSegmentInsert('1 day', '2024-01-01', '2024-12-30')
-//     },
-//     {
-//         name: '2160 segments (every 4 hours)',
-//         segments: 2160,
-//         insert: makeSegmentInsert('4 hours', '2024-01-01', '2024-12-30 20:00:00')
-//     },
-//     {
-//         name: '8760 segments (hourly)',
-//         segments: 8760,
-//         insert: makeSegmentInsert('1 hour', '2024-01-01', '2024-12-30 23:00:00')
-//     },
-//     {
-//         name: '17520 segments (every 30 min)',
-//         segments: 17520,
-//         insert: makeSegmentInsert('30 minutes', '2024-01-01', '2024-12-30 23:30:00')
-//     }
-// ];
-
-const SCENARIOS = [
-    {
-        name: '1 segment (no variation)',
-        segments: 1,
-        insert: `INSERT INTO cik_vary (source_id, destination_id, start_time, end_time, slope, intercept)
-                 VALUES (${SOURCE_ID}, ${DEST_ID}, '-infinity', 'infinity', 0.12, 0);`
-    },
-    {
-        name: '12 segments (monthly)',
-        segments: 12,
-        insert: makeSegmentInsert('1 month', '2020-01-01', '2020-12-31')
-    },
-    {
-        name: '52 segments (weekly)',
-        segments: 52,
-        insert: makeSegmentInsert('1 week', '2020-01-01', '2020-12-31')
-    },
-    {
-        name: '365 segments (daily)',
-        segments: 365,
-        insert: makeSegmentInsert('1 day', '2020-01-01', '2020-12-31')
-    },
-    {
-        name: '2160 segments (every 4 hours)',
-        segments: 2160,
-        insert: makeSegmentInsert('4 hours', '2020-01-01', '2020-12-31')
-    },
-    {
-        name: '8760 segments (hourly)',
-        segments: 8760,
-        insert: makeSegmentInsert('1 hour', '2020-01-01', '2020-12-31')
-    },
-    {
-        name: '17520 segments (every 30 min)',
-        segments: 17520,
-        insert: makeSegmentInsert('30 minutes', '2020-01-01', '2020-12-31')
-    }
+const SCENARIO_DEFS = [
+	{ name: '1 segment (no variation)', mode: 'single' },
+	{ name: '12 segments (monthly)', interval: '1 month' },
+	{ name: '52 segments (weekly)', interval: '1 week' },
+	{ name: '365 segments (daily)', interval: '1 day' },
+	{ name: '2160 segments (every 4 hours)', interval: '4 hours' },
+	{ name: '8760 segments (hourly)', interval: '1 hour' },
+	{ name: '17520 segments (every 30 min)', interval: '30 minutes' }
 ];
 
-async function timeQuery(client, query, runs = 3) {
-    const times = [];
-    let rowCount = 0;
-    for (let i = 0; i < runs; i++) {
-        const start = process.hrtime.bigint();
-        const result = await client.query(query, [SOURCE_ID, DEST_ID, METER_ID]);
-        const end = process.hrtime.bigint();
-        times.push(Number(end - start) / 1_000_000);
-        rowCount = result.rowCount;
-    }
-    return {
-        avg: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
-        min: Math.round(Math.min(...times)),
-        max: Math.round(Math.max(...times)),
-        rowCount
-    };
+function parseIntegerEnv(name, fallback) {
+	const raw = process.env[name];
+	if (raw === undefined || raw === '') {
+		return fallback;
+	}
+	const parsed = Number.parseInt(raw, 10);
+	if (Number.isNaN(parsed)) {
+		throw new Error(`Environment variable ${name} must be an integer, got "${raw}"`);
+	}
+	return parsed;
+}
+
+function addMs(dateLike, ms) {
+	return new Date(new Date(dateLike).getTime() + ms);
+}
+
+async function assertRequiredObjects(client) {
+	const result = await client.query(`
+		SELECT
+			to_regclass('public.readings') AS readings,
+			to_regclass('public.readings_hypertable') AS readings_hypertable,
+			to_regclass('public.cagg_hourly_readings_unit') AS cagg,
+			to_regclass('public.cik_vary') AS cik_vary
+	`);
+	const row = result.rows[0];
+	if (!row.readings) {
+		throw new Error('Missing readings table.');
+	}
+	if (!row.readings_hypertable) {
+		throw new Error('Missing readings_hypertable. Run the Timescale setup first.');
+	}
+	if (!row.cagg) {
+		throw new Error('Missing cagg_hourly_readings_unit. Run the Timescale setup first.');
+	}
+	if (!row.cik_vary) {
+		throw new Error('Missing cik_vary table.');
+	}
+}
+
+async function loadMeterContext(client) {
+	const result = await client.query(`
+		SELECT
+			m.id,
+			m.unit_id,
+			m.default_graphic_unit,
+			MIN(r.start_timestamp) AS min_start,
+			MAX(r.end_timestamp) AS max_end,
+			COUNT(*)::int AS reading_count
+		FROM meters m
+		INNER JOIN readings r ON r.meter_id = m.id
+		WHERE m.id = $1
+		GROUP BY m.id, m.unit_id, m.default_graphic_unit
+	`, [METER_ID]);
+
+	if (result.rowCount === 0) {
+		throw new Error(`Meter ${METER_ID} was not found or has no readings.`);
+	}
+
+	const row = result.rows[0];
+	return {
+		meterId: row.id,
+		sourceId: row.unit_id,
+		destinationId: process.env.DEST_ID
+			? parseIntegerEnv('DEST_ID', 1)
+			: (row.default_graphic_unit || 1),
+		rangeStart: row.min_start,
+		rangeEndExclusive: addMs(row.max_end, 1),
+		readingCount: row.reading_count
+	};
+}
+
+async function resetScenarioCik(client, sourceId, destinationId) {
+	await client.query(
+		'DELETE FROM cik_vary WHERE source_id = $1 AND destination_id = $2',
+		[sourceId, destinationId]
+	);
+}
+
+async function insertScenarioSegments(client, scenario, sourceId, destinationId, rangeStart, rangeEndExclusive) {
+	if (scenario.mode === 'single') {
+		await client.query(`
+			INSERT INTO cik_vary (source_id, destination_id, start_time, end_time, slope, intercept)
+			VALUES ($1, $2, '-infinity', 'infinity', 0.12, 0)
+		`, [sourceId, destinationId]);
+		return;
+	}
+
+	await client.query(`
+		WITH bounds AS (
+			SELECT
+				$1::int AS source_id,
+				$2::int AS destination_id,
+				$3::timestamp AS range_start,
+				$4::timestamp AS range_end,
+				$5::interval AS segment_size
+		)
+		INSERT INTO cik_vary (source_id, destination_id, start_time, end_time, slope, intercept)
+		SELECT
+			b.source_id,
+			b.destination_id,
+			gs AS start_time,
+			LEAST(gs + b.segment_size, b.range_end) AS end_time,
+			0.08 + mod(extract(epoch FROM gs)::numeric, 11) * 0.005 AS slope,
+			0 AS intercept
+		FROM bounds b,
+		LATERAL generate_series(
+			b.range_start,
+			b.range_end - interval '1 millisecond',
+			b.segment_size
+		) gs
+		WHERE gs < b.range_end
+	`, [sourceId, destinationId, rangeStart, rangeEndExclusive, scenario.interval]);
+}
+
+async function countScenarioSegments(client, sourceId, destinationId) {
+	const result = await client.query(`
+		SELECT COUNT(*)::int AS count
+		FROM cik_vary
+		WHERE source_id = $1 AND destination_id = $2
+	`, [sourceId, destinationId]);
+	return result.rows[0].count;
+}
+
+async function timeQuery(client, query, sourceId, destinationId, meterId, runs = RUNS) {
+	const times = [];
+	let rowCount = 0;
+
+	for (let i = 0; i < runs; i += 1) {
+		const start = process.hrtime.bigint();
+		const result = await client.query(query, [sourceId, destinationId, meterId]);
+		const end = process.hrtime.bigint();
+		times.push(Number(end - start) / 1_000_000);
+		rowCount = result.rowCount;
+	}
+
+	return {
+		avg: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
+		min: Math.round(Math.min(...times)),
+		max: Math.round(Math.max(...times)),
+		rowCount
+	};
 }
 
 async function runBenchmark() {
-    const client = await pool.connect();
-    const results = [];
+	const client = await pool.connect();
 
-    console.log('OED TimescaleDB Benchmark');
-    console.log('=========================');
-    console.log(`Testing source_id=${SOURCE_ID}, dest_id=${DEST_ID}, meter_id=${METER_ID}`);
-    console.log('3 runs per query per scenario\n');
+	try {
+		await assertRequiredObjects(client);
+		const context = await loadMeterContext(client);
+		const outputFile = process.env.OUTPUT_FILE || DEFAULT_OUTPUT;
+		const results = [];
 
-    try {
-        for (const scenario of SCENARIOS) {
-            console.log(`Scenario: ${scenario.name}`);
+		console.log('OED TimescaleDB Benchmark');
+		console.log('=========================');
+		console.log(`meter_id=${context.meterId}`);
+		console.log(`source_id=${context.sourceId}`);
+		console.log(`destination_id=${context.destinationId}`);
+		console.log(`reading_count=${context.readingCount}`);
+		console.log(`range=${context.rangeStart.toISOString()} -> ${context.rangeEndExclusive.toISOString()}`);
+		console.log(`runs per scenario=${RUNS}\n`);
 
-            await client.query(
-                'DELETE FROM cik_vary WHERE source_id = $1 AND destination_id = $2',
-                [SOURCE_ID, DEST_ID]
-            );
-            await client.query(scenario.insert);
+		for (const scenario of SCENARIO_DEFS) {
+			console.log(`Scenario: ${scenario.name}`);
 
-            const countResult = await client.query(
-                'SELECT COUNT(*) FROM cik_vary WHERE source_id = $1 AND destination_id = $2',
-                [SOURCE_ID, DEST_ID]
-            );
-            const actualSegments = parseInt(countResult.rows[0].count);
+			await resetScenarioCik(client, context.sourceId, context.destinationId);
+			await insertScenarioSegments(
+				client,
+				scenario,
+				context.sourceId,
+				context.destinationId,
+				context.rangeStart,
+				context.rangeEndExclusive
+			);
 
-            process.stdout.write('  readings...            ');
-            const timingsA = await timeQuery(client, QUERY_READINGS);
-            console.log(`avg=${timingsA.avg}ms  rows=${timingsA.rowCount}`);
+			const actualSegments = await countScenarioSegments(client, context.sourceId, context.destinationId);
 
-            process.stdout.write('  readings_hypertable... ');
-            const timingsB = await timeQuery(client, QUERY_HYPERTABLE);
-            console.log(`avg=${timingsB.avg}ms  rows=${timingsB.rowCount}`);
+			process.stdout.write('  readings...            ');
+			const timingsA = await timeQuery(client, QUERY_READINGS, context.sourceId, context.destinationId, context.meterId);
+			console.log(`avg=${timingsA.avg}ms  rows=${timingsA.rowCount}`);
 
-            process.stdout.write('  cagg_hourly...         ');
-            const timingsC = await timeQuery(client, QUERY_CAGG);
-            console.log(`avg=${timingsC.avg}ms  rows=${timingsC.rowCount}\n`);
+			process.stdout.write('  readings_hypertable... ');
+			const timingsB = await timeQuery(client, QUERY_HYPERTABLE, context.sourceId, context.destinationId, context.meterId);
+			console.log(`avg=${timingsB.avg}ms  rows=${timingsB.rowCount}`);
 
-            results.push({
-                name: scenario.name,
-                segments: actualSegments,
-                readings:    { avgMs: timingsA.avg, minMs: timingsA.min, maxMs: timingsA.max, rowCount: timingsA.rowCount },
-                hypertable:  { avgMs: timingsB.avg, minMs: timingsB.min, maxMs: timingsB.max, rowCount: timingsB.rowCount },
-                cagg:        { avgMs: timingsC.avg, minMs: timingsC.min, maxMs: timingsC.max, rowCount: timingsC.rowCount }
-            });
-        }
+			process.stdout.write('  cagg_hourly...         ');
+			const timingsC = await timeQuery(client, QUERY_CAGG, context.sourceId, context.destinationId, context.meterId);
+			console.log(`avg=${timingsC.avg}ms  rows=${timingsC.rowCount}\n`);
 
-        await client.query(
-            'DELETE FROM cik_vary WHERE source_id = $1 AND destination_id = $2',
-            [SOURCE_ID, DEST_ID]
-        );
+			results.push({
+				name: scenario.name,
+				segments: actualSegments,
+				readings: { avgMs: timingsA.avg, minMs: timingsA.min, maxMs: timingsA.max, rowCount: timingsA.rowCount },
+				hypertable: { avgMs: timingsB.avg, minMs: timingsB.min, maxMs: timingsB.max, rowCount: timingsB.rowCount },
+				cagg: { avgMs: timingsC.avg, minMs: timingsC.min, maxMs: timingsC.max, rowCount: timingsC.rowCount }
+			});
+		}
 
-        fs.writeFileSync('benchmark_hypertable_results.json', JSON.stringify(results, null, 2));
-        console.log('✓ Results saved to benchmark_hypertable_results.json');
+		await resetScenarioCik(client, context.sourceId, context.destinationId);
+		fs.writeFileSync(outputFile, JSON.stringify(results, null, 2));
+		console.log(`✓ Results saved to ${outputFile}`);
 
-        const w = 36;
-        console.log('\n' + '─'.repeat(82));
-        console.log('Scenario'.padEnd(w) + 'Segs'.padEnd(8) + 'readings'.padEnd(14) + 'hypertable'.padEnd(14) + 'cagg');
-        console.log('─'.repeat(82));
-        for (const r of results) {
-            console.log(
-                r.name.padEnd(w) +
-                String(r.segments).padEnd(8) +
-                (r.readings.avgMs + 'ms').padEnd(14) +
-                (r.hypertable.avgMs + 'ms').padEnd(14) +
-                (r.cagg.avgMs + 'ms')
-            );
-        }
-        console.log('─'.repeat(82));
-
-    } catch (err) {
-        console.error('\nError:', err.message);
-        console.error(err);
-    } finally {
-        client.release();
-        await pool.end();
-    }
+		const w = 36;
+		console.log('\n' + '─'.repeat(82));
+		console.log('Scenario'.padEnd(w) + 'Segs'.padEnd(8) + 'readings'.padEnd(14) + 'hypertable'.padEnd(14) + 'cagg');
+		console.log('─'.repeat(82));
+		for (const r of results) {
+			console.log(
+				r.name.padEnd(w) +
+				String(r.segments).padEnd(8) +
+				(`${r.readings.avgMs}ms`).padEnd(14) +
+				(`${r.hypertable.avgMs}ms`).padEnd(14) +
+				`${r.cagg.avgMs}ms`
+			);
+		}
+		console.log('─'.repeat(82));
+	} finally {
+		client.release();
+		await pool.end();
+	}
 }
 
-runBenchmark();
+runBenchmark().catch(error => {
+	console.error('\nBenchmark failed:');
+	console.error(error.message);
+	console.error(error);
+	process.exitCode = 1;
+});

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OED TimescaleDB Benchmarking Summary</title>
+  <style>
+    :root {
+      color-scheme: light;
+    }
+
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #111111;
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.45;
+    }
+
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 56px 64px;
+    }
+
+    h1, h2, h3 {
+      font-family: Arial, Helvetica, sans-serif;
+      font-weight: 700;
+      line-height: 1.2;
+      margin: 0 0 14px;
+    }
+
+    h1 {
+      font-size: 30px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      font-size: 22px;
+      margin-top: 28px;
+    }
+
+    h3 {
+      font-size: 18px;
+      margin-top: 20px;
+    }
+
+    p, li {
+      font-size: 15px;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul, ol {
+      margin: 0 0 14px 24px;
+      padding: 0;
+    }
+
+    li {
+      margin: 0 0 8px;
+    }
+
+    code, pre {
+      font-family: "Courier New", Courier, monospace;
+    }
+
+    code {
+      background: #f4f4f4;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 0.96em;
+    }
+
+    pre {
+      background: #f7f7f7;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 10px 0 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .muted {
+      color: #555555;
+    }
+
+    .section {
+      margin-bottom: 8px;
+    }
+
+    .subsection-group {
+      margin-left: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>OED TimescaleDB Benchmarking Summary</h1>
+    <p class="muted">Formatted for project-summary handoff and easy copy/paste into Google Docs.</p>
+
+    <h2>Overview</h2>
+    <p><strong>Purpose:</strong> improve performance of the OED database using TimescaleDB.</p>
+    <p><strong>Key changes:</strong></p>
+    <ul>
+      <li>Implement TimescaleDB.</li>
+      <li>Convert the <code>readings</code> table to a hypertable.</li>
+      <li>Replace materialized views with continuous aggregates.</li>
+    </ul>
+    <p><strong>Goals:</strong></p>
+    <ul>
+      <li>Reduce query time.</li>
+      <li>Avoid full table recomputation.</li>
+      <li>Support time-based queries more efficiently.</li>
+    </ul>
+
+    <h2>Implementing TimescaleDB</h2>
+    <p>SQL commands were executed using pgAdmin connected to the OED database container.</p>
+
+    <h3>2.1 Environment Setup</h3>
+    <ol>
+      <li>Start from a fresh OED install or a clean database volume.</li>
+      <li>Update the Docker image in <code>containers/database/Dockerfile</code>:</li>
+    </ol>
+    <pre>FROM timescale/timescaledb:2.26.1-pg15</pre>
+    <ol start="3">
+      <li>Rebuild containers:</li>
+    </ol>
+    <pre>docker compose up --build</pre>
+
+    <h3>2.2 Enabling Extension</h3>
+    <p>Ensure TimescaleDB is installed and available, then enable the extension in pgAdmin:</p>
+    <pre>CREATE EXTENSION timescaledb;</pre>
+
+    <h3>2.3 Initialize Test Data</h3>
+    <p>In the web container or local project environment, run:</p>
+    <pre>npm run testData</pre>
+    <p>Verify that tables were populated:</p>
+    <pre>SELECT * FROM meters;
+SELECT * FROM groups;
+SELECT * FROM readings;</pre>
+
+    <h2>Creating a Hypertable</h2>
+
+    <h3>3.1 Create a Copy of the Readings Table</h3>
+    <p>A copy of the <code>readings</code> table was created so the original table could remain unchanged during testing.</p>
+    <pre>CREATE TABLE readings_hypertable (LIKE readings INCLUDING ALL);</pre>
+
+    <h3>3.2 Copy Existing Data</h3>
+    <p>All rows from <code>readings</code> were inserted into the new table.</p>
+    <pre>INSERT INTO readings_hypertable SELECT * FROM readings;</pre>
+
+    <h3>3.3 Verify Table Contents</h3>
+    <p>The current database and row counts were checked to confirm the correct table was modified and that the copied data matched the original.</p>
+    <pre>SELECT current_database();
+SELECT COUNT(*) FROM readings;
+SELECT COUNT(*) FROM readings_hypertable;</pre>
+
+    <h3>3.4 Convert the Table to a Hypertable</h3>
+    <p>The copied table is converted into a TimescaleDB hypertable using <code>start_timestamp</code> as the time column.</p>
+    <pre>SELECT create_hypertable(
+  'readings_hypertable',
+  'start_timestamp',
+  migrate_data =&gt; TRUE,
+  if_not_exists =&gt; TRUE
+);</pre>
+
+    <h3>3.5 Verify Hypertable Creation</h3>
+    <p>TimescaleDB metadata tables are queried to verify that the hypertable and its chunks were created successfully.</p>
+    <pre>SELECT * FROM timescaledb_information.hypertables;
+SELECT * FROM timescaledb_information.chunks;</pre>
+
+    <h2>4 Benchmarking</h2>
+
+    <div class="subsection-group">
+    <h3>4.1 Script Setup</h3>
+    <p>All benchmark scripts are located under <code>src/server/test/benchmark</code>.</p>
+    <ol>
+      <li>Start the database container:</li>
+    </ol>
+    <pre>docker compose up -d database</pre>
+    <ol start="2">
+      <li>Make sure the Timescale prototype objects exist if the benchmark depends on them. In pgAdmin, run:</li>
+    </ol>
+    <pre>containers/database/timescaledb/hypertable.sql
+containers/database/timescaledb/continuous_aggregates.sql</pre>
+    <ol start="3">
+      <li>Initialize benchmark data:</li>
+    </ol>
+    <pre>npm run testData</pre>
+    <p>Optional test-data generators:</p>
+    <pre>npm run generateTestingData
+npm run generateFifteenMinuteTestingData
+npm run generateFourHourTestingData</pre>
+    <ol start="4">
+      <li>Install Node dependencies if needed:</li>
+    </ol>
+    <pre>npm install</pre>
+    <ol start="5">
+      <li>Run benchmark scripts from the project root:</li>
+    </ol>
+    <pre>npm run benchmarkBaseline
+npm run benchmarkHypertable
+npm run benchmarkHourlyRefresh
+npm run benchmarkCaggUpdatePatterns</pre>
+    <ol start="6">
+      <li>Visualize results by opening the matching HTML file in a browser and pasting in the generated JSON.</li>
+    </ol>
+
+    <h3>4.2 Important Benchmark Changes</h3>
+    <p>The older benchmark scripts were updated so they still run correctly against the live database.</p>
+    <p>Previously, the old scripts depended on:</p>
+    <ul>
+      <li>hardcoded database credentials</li>
+      <li>hardcoded source and destination unit IDs</li>
+      <li>hardcoded date windows such as <code>2020</code> or <code>2024</code></li>
+    </ul>
+    <p>They now:</p>
+    <ul>
+      <li>derive the meter’s live reading range from the database</li>
+      <li>derive <code>source_id</code> from the selected meter</li>
+      <li>use the meter’s default graphic unit as <code>destination_id</code> unless overridden</li>
+      <li>generate <code>cik_vary</code> segments over the actual live benchmark range</li>
+      <li>support environment variables for database connection and meter selection</li>
+      <li>write output files into the benchmark directory consistently</li>
+    </ul>
+    <p>Both older scripts also force UTC timestamp handling to avoid time-shift errors during benchmark generation.</p>
+
+    <h3>4.3 Benchmark File Summary</h3>
+
+    <p><strong><code>benchmark.js</code></strong></p>
+    <p><strong>Run with:</strong></p>
+    <pre>npm run benchmarkBaseline</pre>
+    <p><strong>Purpose:</strong> original baseline benchmark for the expensive <code>cik_vary</code> overlap join.</p>
+    <p><strong>What it tests:</strong></p>
+    <ul>
+      <li>raw <code>readings</code></li>
+      <li><code>cik_vary</code> overlap join cost</li>
+      <li>segment densities from one fixed segment up to dense sub-hourly variation</li>
+    </ul>
+    <p><strong>What changed:</strong></p>
+    <ul>
+      <li>uses live meter dates instead of fixed scenario years</li>
+      <li>derives source and destination context from the database</li>
+      <li>can be redirected with environment variables</li>
+    </ul>
+    <p><strong>Output:</strong> <code>benchmark_results.json</code></p>
+    <p><strong>Visualized with:</strong> <code>benchmark_chart.html</code></p>
+
+    <p><strong><code>benchmark_hypertable.js</code></strong></p>
+    <p><strong>Run with:</strong></p>
+    <pre>npm run benchmarkHypertable</pre>
+    <p><strong>Purpose:</strong> compares the same <code>cik_vary</code> overlap join across <code>readings</code>, <code>readings_hypertable</code>, and <code>cagg_hourly_readings_unit</code>.</p>
+    <p><strong>What it tests:</strong></p>
+    <ul>
+      <li>whether the hypertable helps raw overlap-join performance</li>
+      <li>whether the hourly continuous aggregate reduces join cost by reducing row count</li>
+    </ul>
+    <p><strong>What changed:</strong></p>
+    <ul>
+      <li>uses the live meter range instead of fixed date windows</li>
+      <li>derives meter and unit context automatically</li>
+      <li>fails early with clearer messages if the hypertable or cagg is missing</li>
+    </ul>
+    <p><strong>Output:</strong> <code>benchmark_hypertable_results.json</code></p>
+    <p><strong>Visualized with:</strong> <code>benchmark_chart.html</code></p>
+
+    <p><strong><code>benchmark_hourly_refresh.js</code></strong></p>
+    <p><strong>Run with:</strong></p>
+    <pre>npm run benchmarkHourlyRefresh</pre>
+    <p><strong>Purpose:</strong> simulates the hourly refresh workflow and compares the old hourly materialized-view path to the new Timescale hourly continuous aggregate path.</p>
+    <p><strong>What it tests:</strong></p>
+    <ul>
+      <li>one hour of new readings inserted</li>
+      <li>full refresh of <code>hourly_readings_unit</code></li>
+      <li>incremental refresh of <code>cagg_hourly_readings_unit</code></li>
+      <li>post-refresh query time for hourly conversion queries</li>
+    </ul>
+    <p><strong>What it shows:</strong></p>
+    <ul>
+      <li>continuous aggregate refresh is dramatically faster than full materialized-view refresh</li>
+      <li>query time is still dominated by the <code>cik_vary</code> overlap join at high segment counts</li>
+    </ul>
+    <p><strong>Output:</strong> <code>benchmark_hourly_refresh_results.json</code></p>
+    <p><strong>Visualized with:</strong> <code>benchmark_hourly_refresh_chart.html</code></p>
+
+    <p><strong><code>benchmark_cagg_update_patterns.js</code></strong></p>
+    <p><strong>Run with:</strong></p>
+    <pre>npm run benchmarkCaggUpdatePatterns</pre>
+    <p><strong>Purpose:</strong> focuses only on the Timescale update path for a single meter.</p>
+    <p><strong>What it tests:</strong></p>
+    <ul>
+      <li>append 1 hour after latest data</li>
+      <li>backfill 1 hour two years before earliest data</li>
+      <li>insert into a future gap, then insert before it with a gap</li>
+      <li>append 1 day</li>
+      <li>append 30 days</li>
+      <li>append the full available history block</li>
+    </ul>
+    <p><strong>What it measures:</strong></p>
+    <ul>
+      <li>hypertable insert time</li>
+      <li>continuous aggregate refresh time</li>
+      <li>total update time</li>
+      <li>chunk growth</li>
+      <li>hourly aggregate rows affected</li>
+    </ul>
+    <p><strong>What it shows:</strong></p>
+    <ul>
+      <li>Timescale handles small and medium update patterns very quickly</li>
+      <li>backfill and gap patterns can create additional hypertable chunks</li>
+      <li>larger blocks remain fast relative to the earlier conversion-query benchmarks</li>
+    </ul>
+    <p><strong>Output:</strong> <code>benchmark_cagg_update_patterns_results.json</code></p>
+    <p><strong>Visualized with:</strong> <code>benchmark_cagg_update_patterns_chart.html</code></p>
+
+    <h3>4.4 Optional Environment Variables</h3>
+    <p>The older benchmark scripts support these overrides:</p>
+    <pre>DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=oed
+DB_USER=oed
+DB_PASSWORD=opened
+METER_ID=1
+DEST_ID=11
+RUNS=3
+OUTPUT_FILE=/custom/path/results.json</pre>
+    <p>Example:</p>
+    <pre>DB_HOST=127.0.0.1 DB_PORT=5432 DB_NAME=oed DB_USER=oed DB_PASSWORD=opened METER_ID=1 DEST_ID=11 npm run benchmarkBaseline</pre>
+
+    <h3>4.5 Recommended Benchmark Order</h3>
+    <ol>
+      <li><code>npm run benchmarkBaseline</code>: establishes the original <code>cik_vary</code> overlap-join problem.</li>
+      <li><code>npm run benchmarkHypertable</code>: shows how the same query behaves on the hypertable and hourly cagg.</li>
+      <li><code>npm run benchmarkHourlyRefresh</code>: shows the old vs new hourly refresh workflow.</li>
+      <li><code>npm run benchmarkCaggUpdatePatterns</code>: shows how the new Timescale path behaves under append, backfill, gap, and bulk-update patterns.</li>
+    </ol>
+    </div>
+
+    <h2>Creating Continuous Aggregates</h2>
+
+    <h3>5.1 Hourly Continuous Aggregate</h3>
+    <p>A continuous aggregate was created on top of the hypertable to pre-compute hourly averages. Unlike a regular materialized view, TimescaleDB only refreshes the buckets that have new data, so it avoids recomputing everything from scratch.</p>
+    <p>In pgAdmin, run the contents of <code>containers/database/timescaledb/continuous_aggregates.sql</code>.</p>
+    <p>Verify it was created:</p>
+    <pre>SELECT * FROM timescaledb_information.continuous_aggregates;
+SELECT * FROM cagg_hourly_readings_unit;</pre>
+
+    <h3>5.2 Daily Continuous Aggregate</h3>
+    <p>A second continuous aggregate was built on top of the hourly one. TimescaleDB supports this as a hierarchical continuous aggregate, so the daily CA reads from the hourly CA instead of going back to the raw hypertable, which makes the daily rollup faster to compute.</p>
+    <p>In pgAdmin, run the contents of <code>containers/database/timescaledb/daily_continuous_aggregate.sql</code>.</p>
+    <p>Verify it was created:</p>
+    <pre>SELECT * FROM cagg_daily_readings_unit;
+SELECT * FROM timescaledb_information.jobs;</pre>
+    <p>The second query confirms the automatic refresh policy was attached. The daily aggregate will now refresh itself once per day without manual intervention.</p>
+  </div>
+</body>
+</html>
